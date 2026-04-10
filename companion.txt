@@ -1,0 +1,2944 @@
+================================================================================
+                  CODING AND DOING MATH FASTER WITH LLMS
+                       AND AGENTIC WORKFLOWS
+================================================================================
+
+                     A Companion Document to Session 4 of
+                  "Generative AI for Scholarship" (HDSI 2026)
+
+                       Harvard Data Science Initiative
+                       Faculty of Arts and Sciences
+                      Northwest Building B103 · April 10, 2026
+
+--------------------------------------------------------------------------------
+ABSTRACT
+--------------------------------------------------------------------------------
+
+This document is the slide-by-slide companion to the fourth and final session of
+the Harvard HDSI "Generative AI for Scholarship" workshop series. Where the
+first three sessions introduced participants to conversational assistants
+(Session 1), notebook-embedded APIs (Session 2), and the Claude Code
+command-line interface as an agentic coder (Session 3), this session addresses
+the question that naturally follows: once an agent can read files, write code,
+run scripts, and iterate on errors, how do we make it follow OUR methodology
+instead of whatever statistical folklore it absorbed during pre-training?
+
+We argue that the answer is a class of artefact that the community has
+converged on under the name "skills": opinionated, version-controlled
+markdown documents that specify the steps, guardrails, and failure modes of a
+domain workflow, and that a coding agent must consult before acting. A skill is
+neither a prompt nor a tool nor a function; it is a methodology encoded as
+text, read on demand, composable with other skills, and portable across agent
+runtimes that implement the emerging Agent Skills Specification.
+
+The companion develops this argument in six movements. Section 1 positions the
+session within the workshop series and the broader AI coding landscape.
+Section 2 builds agents from first principles, showing that the celebrated
+"agentic loop" is, literally, a while loop whose body is an LLM call plus a
+tool call plus a memory update. Section 3 defines skills and distinguishes
+them from the adjacent concepts they are most frequently confused with
+(prompts, CLAUDE.md global instructions, Model Context Protocol tools, and
+subagents). Section 4 presents four worked case studies --- a Bayesian
+workflow skill, a causal inference skill, a pair of software-engineering
+skills (TDD and systematic debugging), and a math-olympiad skill --- and
+reports the quantitative evaluations that justify each design choice.
+Section 5 translates the theory into practice: how to author a SKILL.md file,
+how to test it, and how to iterate on it when it fails. Section 6 is the
+hands-on exercise students completed in room B103, reproduced here so readers
+can complete it at home. Section 7 is a short discussion and reading list.
+
+The thesis of the document, stated once here in unvarnished form, is this:
+coding agents in 2026 are already capable of executing almost any technical
+task a graduate student can articulate. What they lack is discipline. A skill
+is a vehicle for discipline. Writing one is the most cost-effective thing a
+research group can do to make AI-assisted science reliable, reproducible, and
+honest about its own uncertainty.
+
+================================================================================
+                                  CONTENTS
+================================================================================
+
+Part I.   Opening and Motivation                                    Slides  1–4
+Part II.  Agents from First Principles                              Slides  5–12
+Part III. Skills: Teaching AI How You Think                         Slides 13–17
+Part IV.  Case Studies                                              Slides 18–23
+Part V.   Authoring Skills                                          Slides 24–27
+Part VI.  Hands-On Exercise                                         Slides 28–31
+Part VII. Synthesis and Resources                                   Slides 32–34
+
+================================================================================
+                     PART I.  OPENING AND MOTIVATION
+================================================================================
+
+--------------------------------------------------------------------------------
+SLIDE 1 — TITLE
+--------------------------------------------------------------------------------
+
+SLIDE CONTENT (verbatim)
+    1/34
+    Coding and Doing Math Faster
+    with LLMs and Agentic Workflows
+    Generative AI for Scholarship — Session 4
+    Harvard Data Science Initiative · April 10, 2026
+    4:00–5:30 PM · Northwest Building B103
+
+COMMENTARY
+
+The stated title uses the word "faster", and that word is the first place a
+careful reader should push back. Speed is what sells tools; it is not what
+justifies them in science. If an agent produces a plausible-looking analysis
+in ten seconds but skips the diagnostic checks that would have revealed the
+model was misspecified, the agent has not made anyone faster; it has made
+the research less defensible while hiding the cost. The session's real topic
+is *better*, not *faster*, and the arc of the ninety minutes is designed to
+earn that reframing.
+
+We keep the word "faster" in the title anyway because it is what most
+researchers come in looking for. Meeting audiences where they are is an
+instructional choice, not a concession. By Slide 12 we will have shown that
+the same agent that produces a fast analysis will also, unprompted, skip prior
+predictive checks on a Bayesian model and jump to estimation on a causal
+model without drawing a DAG. By Slide 15 we will have named that behavior the
+*problem that skills solve*.
+
+--------------------------------------------------------------------------------
+SLIDE 2 — WHERE WE ARE
+--------------------------------------------------------------------------------
+
+SLIDE CONTENT (verbatim)
+    2/34
+    Where We Are
+    •  Session 1: The Basics — Gemini, NotebookLM, Gems
+    •  Session 2: The AI-Empowered Coder — Colab + JupyterLab + APIs
+    •  Session 3: Claude Code CLI — agentic coding from the terminal
+    •  Today: From conversations to methodologies
+    "In Session 3, you talked to Claude Code. You gave it a prompt, it wrote
+     code, you iterated. That was a conversation. Today we go deeper."
+
+COMMENTARY
+
+The series has taken participants progressively closer to the metal. Session 1
+lived entirely in the browser: a researcher types a question into a chat box,
+a language model answers, the session is ephemeral. Session 2 put a
+programmable wrapper around the same models --- the Python SDK, a Jupyter
+kernel --- so that prompts could be composed, batched, and integrated with
+data that lives on disk. Session 3 handed the researcher a terminal agent
+that can read files, write files, and execute shell commands on its own
+judgement, under human supervision, in the context of a real project
+directory.
+
+The rhetorical distinction between "conversation" and "methodology" is the
+load-bearing idea of the session. A conversation is a sequence of prompts
+and replies in which the human supplies the discipline each turn: you notice
+that the agent skipped a step, you tell it to go back, it complies, and next
+time the same conversation begins from zero. A methodology is a persistent
+artefact: a document, read by the agent before it acts, that says what the
+steps are, what order they go in, which ones are mandatory, and what counts
+as evidence that they have been completed. Methodology trades the flexibility
+of ad-hoc correction for the reliability of written procedure, and for most
+scientific work this is the correct trade.
+
+This framing has a lineage outside AI. It is the same argument that drives
+standard operating procedures in wet labs, pre-analysis plans in experimental
+economics, and PRISMA checklists in systematic reviews. In each case a
+community that cared about reproducibility decided that the discipline of
+writing the protocol down was worth the overhead of writing the protocol
+down. Skills are the translation of that insight into the language agents
+can read.
+
+--------------------------------------------------------------------------------
+SLIDE 3 — THE AI CODING LANDSCAPE IN 60 SECONDS
+--------------------------------------------------------------------------------
+
+SLIDE CONTENT (verbatim)
+    3/34
+    The AI Coding Landscape in 60 Seconds
+    •  Browser Tools (everyone): Lovable, Replit, v0, Google AI Studio
+    •  IDE Agents (professional humans): Cursor, VS Code + Copilot, Windsurf
+    •  CLI Agents (humans + agents): Claude Code, Codex CLI, Gemini CLI
+    You already know the CLI layer from Session 3.
+    Today: what makes agents actually useful for research — and how skills
+    change everything.
+
+COMMENTARY
+
+The three layers are distinguished not only by the interface but by WHO is
+presumed to be at the keyboard. Browser tools assume a user who wants to
+build something and does not want to think about the shell, a filesystem, a
+package manager, or a test runner. The tool takes the prompt, produces a
+running artefact, and hides the rest. The model of work is "tell me what you
+want and I will build it." This is extraordinarily powerful for prototyping
+and for the large population of researchers who are not software engineers,
+but the opacity is the point: when something goes wrong, the user has limited
+surface area to diagnose the failure.
+
+IDE agents are the middle layer. They sit inside the editor a professional
+developer already uses --- VS Code, JetBrains, Cursor's Code fork --- and
+they participate in the edit loop: suggesting completions, proposing
+refactors, explaining code, answering questions about the local project.
+The assumption is that the user can read the output, knows what a diff is,
+and will accept or reject suggestions individually. The loop is still
+primarily human-driven.
+
+CLI agents are the third layer and they differ from the other two in a
+subtle but consequential way: they are designed to be driven not only by
+humans but by other agents. Because the CLI is text in and text out, because
+each invocation is a reproducible shell command, and because the output is a
+log file rather than a GUI event stream, CLI agents compose. Claude Code can
+spawn a subagent to investigate a bug; that subagent can call Claude Code
+again to run a test; the test output can be piped into yet another agent
+that writes a summary. The CLI is the substrate on which multi-agent systems
+are actually built in 2026, and it is the layer we spend the rest of the
+session on.
+
+The final sentence of the slide is a promise: today we answer "what makes
+agents actually useful for research." The answer, developed across the next
+thirty slides, is that agents become useful for research when they stop
+being general-purpose code writers and start being domain-specific
+methodology executors --- and skills are the mechanism of the transition.
+
+--------------------------------------------------------------------------------
+SLIDE 4 — TODAY'S ROADMAP
+--------------------------------------------------------------------------------
+
+SLIDE CONTENT (verbatim)
+    4/34
+    Today's Roadmap
+    1.  First Principles — What is an agent? (20 min)
+    2.  Skills: The Core — What they are, why they matter, real examples (25 min)
+    3.  Build Your Own — Hands-on: create a skill for your research (25 min)
+    4.  Synthesize — Share, discuss, next steps (10 min)
+    By the end: you will have created a reusable AI skill encoding YOUR
+    methodology.
+
+COMMENTARY
+
+The ninety minutes are budgeted as 20 + 25 + 25 + 10, with 10 minutes
+reserved for the overhead of transitions, questions, and setup. The structure
+is deliberately front-loaded with conceptual material: participants who
+attempt to write a SKILL.md without first understanding what an agent is,
+what a skill is, and what a skill is *not*, tend to produce either
+unstructured prompts or rigid workflows that their agent cannot follow. The
+didactic claim is that twenty-five minutes of conceptual grounding pays for
+itself in the hands-on portion.
+
+The learning objective --- "you will have created a reusable AI skill
+encoding YOUR methodology" --- is stated as an outcome the participant
+controls, not a claim about the instructor's delivery. This is the one
+deliverable we ask every attendee to leave with, and we will measure session
+effectiveness by the fraction who have a working SKILL.md in their own
+`~/.claude/skills/` directory when they walk out.
+
+================================================================================
+                 PART II.  AGENTS FROM FIRST PRINCIPLES
+================================================================================
+
+--------------------------------------------------------------------------------
+SLIDE 5 — SECTION DIVIDER
+--------------------------------------------------------------------------------
+
+SLIDE CONTENT (verbatim)
+    5/34
+    Agents from First Principles
+    What is an agent, really?
+
+COMMENTARY
+
+The phrase "what is an agent, really?" is a deliberate provocation against
+the word's inflation in 2025–2026 marketing. In the strictest form we care
+about, an agent is a computer program that uses a language model as its
+planner, is permitted to call tools that affect the world, observes the
+results of those calls, and iterates until a goal is reached or until it
+decides it cannot proceed. Anything less (no tool calls, no iteration) is a
+chatbot. Anything more (no LLM in the loop) is a workflow. The next several
+slides will make this definition concrete.
+
+--------------------------------------------------------------------------------
+SLIDE 6 — CHATBOT VS. AGENT
+--------------------------------------------------------------------------------
+
+SLIDE CONTENT (verbatim)
+    6/34
+    Chatbot vs. Agent
+    Chatbot
+        → Reactive
+        → Single-turn
+        → No tools
+    Agent
+        → Proactive
+        → Multi-step
+        → Uses tools
+    An agent is a system that uses an LLM to pursue a goal by planning and
+    taking actions with tools, iterating in a feedback loop until it's done.
+
+COMMENTARY
+
+The three-property contrast --- reactive vs. proactive, single-turn vs.
+multi-step, no tools vs. tools --- is the shortest operational definition
+that still survives contact with practice. Each property is load-bearing.
+
+*Reactive vs. proactive.* A chatbot only responds when prompted; an agent
+can decide that a sub-goal is needed and pursue it without asking. In
+practice this means that when you ask an agent to debug a failing test, it
+will (if it chooses) open the test file, open the source file, read both,
+run the test to see the actual error, grep for related code, and only then
+propose a fix. A chatbot would hand the work back to you at each step.
+
+*Single-turn vs. multi-step.* A chatbot reasons within one response; an
+agent chains responses, with each step's output becoming the next step's
+input. This is the mechanical source of agent power: the model's limited
+context window is not the end of its reasoning horizon, because each loop
+iteration compresses the previous step into an observation.
+
+*No tools vs. tools.* A chatbot's only output is text; an agent's output
+can be a file written, a command executed, an API called. This is also the
+source of agent danger: a chatbot that hallucinates a command does no harm,
+while an agent that hallucinates a command runs it.
+
+The formal definition at the bottom of the slide is the one we return to
+throughout the session. Each phrase in it is doing work: "uses an LLM"
+(there is a language model in the planning loop, not just a script); "to
+pursue a goal" (there is a goal, supplied by the human, not an infinite
+dialogue); "by planning and taking actions with tools" (reasoning plus
+effect); "iterating in a feedback loop" (the loop is the thing, not any
+individual action); "until it's done" (there is a termination condition,
+and the agent is the one who judges whether it has been met).
+
+--------------------------------------------------------------------------------
+SLIDE 7 — THE AGENT LOOP IS A WHILE LOOP
+--------------------------------------------------------------------------------
+
+SLIDE CONTENT (verbatim)
+    7/34
+    The Agent Loop — It's Just a While Loop
+
+        while not done:
+            # 1. Think: what should I do next?
+            plan = llm.think(goal, memory, observations)
+            # 2. Act: use a tool
+            result = use_tool(plan.next_action())
+            # 3. Observe: what happened?
+            memory.add(result)
+            # 4. Decide: am I done?
+            done = plan.is_complete()
+
+    That's it. Every agent — from Claude Code to AutoGPT — is this loop.
+
+COMMENTARY
+
+The pseudocode on this slide is not a simplification that hides complexity
+underneath; it is a faithful description of the control flow of every modern
+coding agent. Simon Willison's widely cited 2025 essay "Agents" makes the
+same reduction in one line --- an agent is "an LLM in a loop with tools" ---
+and the pseudocode above is that line unrolled. Claude Code, Codex CLI,
+Gemini CLI, AutoGPT, ReAct, Devin, and the various research prototypes
+that have generated a decade of papers all have this loop somewhere at
+their core. What differs between systems is not
+the shape of the loop but the quality of each component: how good the LLM's
+planning is, how rich the tool set is, how the memory is managed, and what
+termination conditions are available.
+
+The four-stage decomposition --- Think, Act, Observe, Decide --- is
+pedagogically useful because each stage maps to a failure mode researchers
+have likely already encountered. Think failures look like bad plans: the
+agent decides to debug by adding print statements when it should be reading
+the stack trace. Act failures look like tool misuse: the agent reaches for a
+hammer when it needed a screwdriver. Observe failures look like ignored
+evidence: the test output says "AssertionError on line 42" and the agent
+proceeds as if it had passed. Decide failures look like premature stopping
+(the agent claims success when three of six tasks are incomplete) or
+infinite looping (the agent keeps modifying the same file without progress).
+
+When we later argue that skills inject "mandatory checkpoints" into an
+agent's workflow, we are really arguing that skills add a constraint to the
+Think stage: the plan cannot exit a phase until a specific Observe has been
+performed and logged. The loop is the substrate; the skill is the
+discipline that runs on top of it.
+
+--------------------------------------------------------------------------------
+SLIDE 8 — THE FOUR COMPONENTS OF AN AGENT
+--------------------------------------------------------------------------------
+
+SLIDE CONTENT (verbatim)
+    8/34
+    The Four Components of an Agent
+    •  LLM (the brain) — reasoning, planning, deciding what to do next
+    •  Tools (the hands) — read files, write code, run scripts, call APIs
+    •  Memory (the notebook) — conversation history, project context,
+       learned facts
+    •  Planning (the strategy) — breaking goals into steps, sequencing actions
+    For researchers: the difference between asking a colleague a question vs.
+    hiring a research assistant who can access your data, run your scripts,
+    and follow your methodology.
+
+COMMENTARY
+
+The four-component decomposition is the level of abstraction at which it is
+most useful to reason about agent design. Each component can be swapped
+independently.
+
+*LLM.* The planner can be any sufficiently capable language model: Claude
+Opus, Claude Sonnet, GPT-4 class, Gemini, open-weight Llama and Qwen
+variants. In 2026 the frontier models differ measurably in their planning
+quality, particularly in long-horizon tasks, but the loop itself is
+model-agnostic.
+
+*Tools.* Tools are the surface through which the agent affects the world.
+In Claude Code the core tool set is small and composable: Read, Write,
+Edit, Bash, Glob, Grep, WebFetch, and the Task / Agent dispatcher that
+spawns a subagent. Together these tools are enough to do every common
+software-engineering task, precisely because they were chosen to cover
+the primitives, not the applications. An MCP (Model Context Protocol)
+server extends the tool set with domain tools: a Postgres MCP adds SQL
+execution, a Slack MCP adds messaging, and so on. Tools are the level at
+which the agent's capabilities are fundamentally bounded.
+
+*Memory.* Memory is the state the agent carries across loop iterations. In
+the most basic form it is the conversation history. More sophisticated
+agents distinguish short-term memory (this turn's observations), medium-term
+memory (the current task's accumulated context), and long-term memory
+(facts persisted across sessions, typically via a memory file or a vector
+store). Claude Code's memory layer is a combination of the rolling
+conversation, the project-local CLAUDE.md, and the auto-memory system that
+writes summaries to disk.
+
+*Planning.* Planning is the explicit or implicit decomposition of a goal
+into steps. Implicit planning happens inside the LLM's forward pass:
+"I should first read the file, then search for the function, then propose
+an edit." Explicit planning elevates this decomposition into a first-class
+object: Claude Code's Plan mode (Shift+Tab in the terminal) asks the model
+to produce a plan that the user must approve before any tool is called.
+Explicit planning is strictly safer; implicit planning is faster. The right
+trade depends on reversibility: if a step writes to a production database,
+explicit is the only acceptable choice.
+
+The analogy on the last line of the slide --- colleague vs. research
+assistant --- is worth dwelling on. When a researcher asks a colleague a
+question, the colleague does not read the data, run the scripts, or follow
+the methodology; the colleague gives advice that the researcher must
+interpret and apply. An agent with the four components above is not a
+colleague; it is a research assistant with keys to the filesystem. The
+appropriate amount of trust to place in such an assistant depends almost
+entirely on whether they have been taught the lab's methodology --- that
+is, whether they have been given the skills.
+
+--------------------------------------------------------------------------------
+SLIDE 9 — WORKFLOWS VS. AGENTS
+--------------------------------------------------------------------------------
+
+SLIDE CONTENT (verbatim)
+    9/34
+    Workflows vs. Agents
+    Workflow
+        → Predefined code paths
+        → Deterministic
+        → You write the control flow
+        → Like a data pipeline
+        → Reliable but rigid
+    Agent
+        → LLM decides what's next
+        → Dynamic, adaptive
+        → Agent chooses the path
+        → Like a research assistant
+        → Flexible but undirected
+    Key insight: most research tasks need something in between.
+    You want flexibility, but you also want the agent to follow your
+    methodology. That's where skills come in.
+
+COMMENTARY
+
+The workflow-vs-agent distinction is the most underappreciated axis in the
+contemporary discourse about "agentic AI". A workflow is deterministic: a
+Python script, a Snakemake pipeline, a DAG in Airflow. Given the same input
+it produces the same output, forever. An agent is non-deterministic: the
+LLM's planning step may, legitimately, choose a different path on different
+runs, and this freedom is the source of its ability to handle inputs the
+author never anticipated.
+
+Both extremes fail for research workflows. Pure workflows fail because
+research is full of decisions a priori unknown to the author: which
+transformation the specific dataset needs, which family of models to try,
+which diagnostic to run when the residuals are heavy-tailed. Pure agents
+fail because research is full of procedural discipline the agent does not
+know to apply: prior predictive checks before sampling, DAG construction
+before estimation, holdout validation before reporting. The Bayesian
+workflow and the causal inference workflow are two crystalline examples of
+this pattern; we treat them in detail in Section 4.
+
+Skills are the "something in between." A skill is a document that
+fixes the *structure* of the workflow --- which steps exist, in what
+order, with which mandatory checkpoints --- while leaving the *content*
+of each step to the agent's LLM-driven judgement. The agent still
+chooses which model family to try, which regularization to use, how to
+code the covariates; the skill dictates that before any of those
+choices can produce a result, the prior predictive checks must have
+passed. The hybrid tends to outperform both extremes on research
+tasks: pure workflows cannot adapt to unexpected inputs, and pure
+agents cannot be trusted to impose procedural discipline on themselves.
+
+Anthropic's own framing of this distinction, in their "Building Effective
+Agents" essay, uses the same dichotomy and recommends that agent designers
+identify the minimal flexibility their task actually requires and fix
+everything else. Skills are the natural artefact of this recommendation.
+
+--------------------------------------------------------------------------------
+SLIDE 10 — CLAUDE CODE IS AN AGENT
+--------------------------------------------------------------------------------
+
+SLIDE CONTENT (verbatim)
+    10/34
+    Claude Code IS an Agent
+    •  LLM → Claude (Sonnet, Opus)
+    •  Tools → Read, Write, Edit, Bash, Glob, Grep, WebFetch, Agent...
+    •  Memory → Conversation context + CLAUDE.md + auto-memory
+    •  Planning → Plan mode (Shift+Tab), task tracking
+    Subagents: Claude Code can spawn isolated sub-agents for parallel work.
+    Each subagent gets its own context, tools, and can work independently.
+    → Delegation of complex tasks in an isolated environment.
+
+COMMENTARY
+
+This slide instantiates the four-component decomposition from Slide 8 in a
+specific system participants already know. The point of the slide is that
+Claude Code is not a special or esoteric agent architecture; it is the same
+while loop with specific choices made at each slot.
+
+The subagent mechanism deserves particular attention. A subagent in Claude
+Code is a new instance of the agent loop, spawned by the parent agent, with
+its own context window, its own tool permissions, and its own goal. The
+subagent runs to completion and returns a single message back to the parent.
+This is the computational analog of delegation: the parent does not need to
+know how the subagent solved the problem, only what it reported. Three
+important consequences follow.
+
+First, subagents protect the parent's context window. Research tasks are
+long and the context limit is finite; if a subagent can search a large
+codebase and return a 200-word summary, the parent has used 200 words of
+its context where it would otherwise have used 20,000.
+
+Second, subagents enable parallelism. If four independent sub-problems
+can be solved in parallel, four subagents can be spawned simultaneously,
+and the wall-clock time of the whole task drops. The math-olympiad skill
+in Section 4 exploits this aggressively, spawning eight to twelve parallel
+solvers.
+
+Third, subagents enable isolation of failure. If a subagent is pursuing a
+risky strategy that might go off the rails, the parent can spawn it in a
+worktree (a separate git worktree of the project) so that whatever it
+writes cannot contaminate the parent's working copy. This is the agent
+version of sandboxing.
+
+Subagents are what turn a single-agent loop into a multi-agent system, and
+multi-agent systems are what turn skills from instructions-for-one-agent
+into orchestration-primitives-for-many.
+
+--------------------------------------------------------------------------------
+SLIDE 11 — LIVE DEMO
+--------------------------------------------------------------------------------
+
+SLIDE CONTENT (verbatim)
+    11/34
+    Live Demo
+    Watch the agent loop in action:
+    Analyze a dataset → Visualize → Iterate on errors
+    [LIVE DEMO — have screenshot backup ready]
+
+COMMENTARY
+
+In the live session this slide was the occasion for a five-minute
+demonstration in which the instructor opened a fresh Claude Code terminal
+in a project directory containing a real dataset and asked the agent to
+produce an exploratory data analysis with a publication-quality figure. The
+goal of the demonstration was not the final figure; it was for the audience
+to see, in real time, the Think / Act / Observe / Decide loop turning over.
+The agent reads the file, encounters an unexpected column type, writes a
+line of code, the code errors, the agent reads the error, revises the
+approach, and tries again. This is the mundane reality of agent work, and
+it is important to watch once without abstraction before moving on to the
+discussion of skills, because the motivation for skills is precisely that
+this mundane loop can go off the rails silently when no discipline is
+imposed.
+
+For a reader of this companion who did not attend the session, the
+exercise is reproducible in five minutes. Install Claude Code, open it in
+any directory containing a CSV, and type: "Produce an exploratory data
+analysis of this file. Save a summary markdown and one figure." Watch each
+tool call. Note which steps the agent chose to perform, which it skipped,
+and which it performed but in an order you would not have chosen. Write
+down the answers to those three questions. They are the first draft of
+your skill.
+
+--------------------------------------------------------------------------------
+SLIDE 12 — THE PROBLEM AGENTS CREATE
+--------------------------------------------------------------------------------
+
+SLIDE CONTENT (verbatim)
+    12/34
+    The Problem Agents Create
+    •  Ask it to build a Bayesian model → skips prior predictive checks
+    •  Ask it to do causal inference → jumps straight to estimation without
+       a DAG
+    •  Ask it to analyze data → picks arbitrary methods, forgets diagnostics
+    •  Ask it to review a paper → misses systematic checks, fabricates citations
+    Agents are like brilliant but untrained research assistants —
+    they can do anything, but they don't know YOUR methodology.
+    This is the problem skills solve.
+
+COMMENTARY
+
+This slide is the hinge of the session. Every claim on it is empirical and
+has been measured in the public literature on skill evaluations. We take
+them in turn.
+
+*"Ask it to build a Bayesian model, it skips prior predictive checks."*
+The prior predictive check --- simulating data from the prior before
+conditioning on the observed data --- is the single most recommended
+diagnostic in the Bayesian workflow of Gelman et al. (2020, "Bayesian
+Workflow", arXiv:2011.01808). It is also the step that unscaffolded agents
+omit most frequently. The reason is straightforward: the prior predictive
+check consumes tokens, appears to "slow down" the workflow, and is not
+required by any library to produce an output. A well-pretrained model knows
+about prior predictive checks in the abstract but will not invoke them
+unprompted because nothing in its training signal rewarded the invocation.
+
+*"Ask it to do causal inference, it jumps straight to estimation."*
+Causal inference without a directed acyclic graph (DAG) is the field's
+paradigm mistake. In the modern framework (Pearl, Hernán and Robins, the
+target-trial literature) the DAG is not a visualization aid; it is the
+*only* mechanism by which the analyst can justify the identification
+strategy. Without the DAG, the agent has no way to reason about whether its
+chosen adjustment set blocks the relevant back-door paths. As the
+learnbayesstats essay on the causal-inference skill puts it: "Most AI tools
+are designed to do more, faster. The causal-inference skill is designed to
+do less, carefully." An unscaffolded agent leaps directly to estimation
+because estimation looks like progress. It is not.
+
+*"Ask it to analyze data, it picks arbitrary methods, forgets diagnostics."*
+An unscaffolded agent asked to fit a regression will fit a linear model
+with default arguments, report a p-value and an R-squared, and move on.
+There will be no residual plot, no VIF check, no influence diagnostic, no
+holdout, no mention of whether the model's assumptions are plausible at
+all. The agent is not incompetent; the agent does not know your lab's
+criteria for when a regression is finished.
+
+*"Ask it to review a paper, it misses systematic checks, fabricates
+citations."* Citation fabrication is the most embarrassing failure mode of
+unconstrained LLM agents and the one that has damaged the field's
+credibility the most. It happens because the model is optimizing for a
+plausible-sounding review, and plausible-sounding reviews cite prior work.
+If the model does not actually remember the relevant prior work, it
+confabulates. A skill that forbids uncited claims and requires every
+reference to be verified against a reachable source (DOI, arXiv ID,
+URL) eliminates this failure mode.
+
+The closing line --- "they can do anything, but they don't know YOUR
+methodology" --- is the problem statement for the rest of the session.
+The next twenty slides are the solution.
+
+================================================================================
+                PART III.  SKILLS: TEACHING AI HOW YOU THINK
+================================================================================
+
+--------------------------------------------------------------------------------
+SLIDE 13 — SECTION DIVIDER
+--------------------------------------------------------------------------------
+
+SLIDE CONTENT (verbatim)
+    13/34
+    Skills
+    Teaching AI How You Think
+
+COMMENTARY
+
+The phrase "how you think" is not a metaphor for style. It is the claim
+that the steps you take, the order you take them in, the questions you ask
+before you start, the diagnostics you run before you believe a result, and
+the language you use when you report it are all part of your methodology,
+and that a skill is the artefact that encodes them. A skill is not a
+personality transplant for your agent; it is a procedure manual for a very
+specific kind of technical work.
+
+--------------------------------------------------------------------------------
+SLIDE 14 — WHAT IS A SKILL?
+--------------------------------------------------------------------------------
+
+SLIDE CONTENT (verbatim)
+    14/34
+    What Is a Skill?
+    A structured instruction manual that teaches an agent HOW to do a
+    specific task the right way.
+    •  Not code. Not a function. A methodology encoded as markdown.
+    •  Like a lab protocol your research assistant must follow — step by
+       step, with checkpoints.
+    One-off prompt  →  Custom command  →  CLAUDE.md rules  →  SKILL  →  Subagent
+    "do X"             saved prompt        always active       on-demand    delegated
+    one-shot           reusable text       every session       workflow     isolated
+
+COMMENTARY
+
+The definition in the first line is carefully chosen. A skill is a
+*structured* instruction manual --- with named sections, fixed order, and
+explicit checkpoints --- not a paragraph of free-form advice. It teaches an
+agent HOW to do a task, not WHAT task to do; the task is supplied by the
+human at invocation time. And it teaches the task the *right* way ---
+where "right" is defined by the skill's author and their community, not by
+any universal standard. A different lab with different conventions would
+write a different skill for the same task, and both skills could be
+correct in their own context.
+
+The bullet points distinguish a skill from adjacent artefacts. It is not
+code (code cannot capture reasoning steps; a skill can say "confirm the
+DAG with the user before estimating", which no function signature can
+express). It is not a function (it has no inputs and outputs in a formal
+sense; it is invoked by an agent that is already in a reasoning loop). It
+is markdown, because markdown is what both humans and LLMs can read with
+minimal friction.
+
+The evolutionary chain on the third line --- prompt → command → CLAUDE.md
+→ skill → subagent --- is the most compact explanation of where skills
+fit in the larger taxonomy.
+
+A one-off prompt is what you type into the chat box today for a task you
+will not repeat. It is instantaneous, unversioned, and forgotten after the
+session. A custom command (Claude Code's slash-command mechanism) is a
+prompt you save to disk because you will reuse it; it is a text file that
+is inserted into the conversation when the user types `/command-name`.
+CLAUDE.md rules are instructions that are loaded into every session in a
+given directory, regardless of what the user asks; they are the agent's
+"always active" context, and they are appropriate for things like "use
+snake_case" or "never write to the database without confirmation." A
+skill is a step up in structure: it is loaded only when relevant,
+contains a full workflow, and is designed to be consulted repeatedly
+during a task rather than scanned once at the start. A subagent is a
+step up in isolation: it is a new agent loop with its own context,
+invoked by the parent, and returned as a single message.
+
+The point of arranging these artefacts in a chain is that they are not
+competitors; they are a progression. A workflow you invoke once belongs
+as a prompt. A workflow you invoke every week belongs as a slash
+command. A convention that applies to every piece of work in a
+directory belongs in CLAUDE.md. A methodology with steps, checkpoints,
+and guardrails belongs as a skill. A task that should run in isolation
+with its own context belongs as a subagent, and subagents themselves
+often have skills attached.
+
+*A bridge from Session 3.* Participants who attended Chris Stubbs's
+Session 3 ("Unleashing Claude Code CLI as a Problem Solver") completed
+an exercise called "Building Custom Skills in Claude Code" in which
+the outcome was reusable slash commands. Those are the "Custom
+command" step on the chain above --- saved prompts invoked by typing
+`/name`, and already a real improvement over retyping the same
+instructions each session. What Session 4 calls a "skill" is the next
+step on the chain: a directory containing a SKILL.md with structured
+frontmatter, an ordered workflow, critical rules, gotchas, and
+optional references/ and scripts/ subdirectories. The word "skill"
+is overloaded between the two sessions, and the distinction is not
+rhetorical: a slash command inserts text into the conversation once,
+while a SKILL.md is read and re-consulted by the agent as it works
+through a task. If you walked out of Session 3 thinking "I've already
+done skills", today is the step where skills stop being saved prompts
+and start being methodology.
+
+--------------------------------------------------------------------------------
+SLIDE 15 — WHY SKILLS MATTER FOR RESEARCH
+--------------------------------------------------------------------------------
+
+SLIDE CONTENT (verbatim)
+    15/34
+    Why Skills Matter for Research
+    Without Skills
+        → Agent guesses your methodology
+        → No validation gates
+        → Different results each time
+        → Generic, surface-level output
+        → Skips what it doesn't know
+    With Skills
+        → Agent follows YOUR methodology
+        → Mandatory checkpoints
+        → Consistent, reproducible workflow
+        → Domain-appropriate output
+        → Encodes community knowledge
+    "Contains critical guardrails that agents won't apply unprompted."
+
+COMMENTARY
+
+The two columns of this slide are not a before/after advertisement; they
+are testable claims. Each bullet in the left column can be verified by
+running a prompt on an unconfigured agent and observing the failure, and
+each bullet in the right column can be verified by running the same prompt
+on an agent with the appropriate skill installed. The case studies in
+Section 4 are exactly these experiments.
+
+*Agent guesses your methodology vs. agent follows your methodology.* The
+unconfigured agent selects from the distribution of methodologies in its
+training data, weighted by how frequently they appear and how clearly they
+were labelled. This distribution is dominated by tutorial blog posts and
+undergraduate textbooks, which rarely exemplify the best practice for any
+given subfield. The configured agent reads a document that says "in this
+lab, for this task, the methodology is X", and X wins.
+
+*No validation gates vs. mandatory checkpoints.* The most important
+structural feature of a skill is the checkpoint --- the instruction that
+says "before proceeding to step N+1, verify that step N has been
+completed." Checkpoints are the mechanism by which skills prevent the
+most common failure mode of agents: rushing past a diagnostic because the
+diagnostic's role is not visible in the immediate goal. The Bayesian
+skill's prior predictive check is a checkpoint. The causal inference
+skill's DAG confirmation is a checkpoint. The TDD skill's failing test
+is a checkpoint.
+
+*Different results each time vs. consistent, reproducible workflow.* An
+unconfigured agent run twice on the same task produces different
+workflows because the LLM's sampling is non-deterministic and because the
+model's implicit prior over methodologies is broad. A configured agent
+produces the same workflow because the skill fixes it; only the content
+of each step varies with the input.
+
+*Generic, surface-level output vs. domain-appropriate output.* "Generic"
+means output that would be acceptable in a textbook but is not
+publishable in a field journal. Bayesian output that reports a 95%
+credible interval when the field convention is 94% HDI; causal output
+that reports a point estimate without a refutation test; software
+output that ships without tests. The skill encodes the field's
+publication standards and produces output at that standard by default.
+
+*Skips what it doesn't know vs. encodes community knowledge.* This is
+the most consequential difference. The unscaffolded agent cannot know
+what it does not know, because nothing in the task description tells
+it. The skill, written by someone who has made the mistakes and
+documented the gotchas, is the externalization of that community
+knowledge and the mechanism by which it is transferred to the agent.
+
+The closing quote --- "contains critical guardrails that agents won't
+apply unprompted" --- is from the baygent-skills project README and
+captures the empirical heart of the argument: the observation is not
+theoretical, it is measured, and the measurement is reproducible.
+
+--------------------------------------------------------------------------------
+SLIDE 16 — SKILLS VS. EVERYTHING ELSE
+--------------------------------------------------------------------------------
+
+SLIDE CONTENT (verbatim)
+    16/34
+    Skills vs. Everything Else
+    •  Skills vs Prompts: Reusable file on disk vs. one-off text you type
+    •  Skills vs CLAUDE.md: Invoked on demand vs. always active (lab protocol
+       vs. dress code)
+    •  Skills vs MCP: Workflow instructions vs. tool connectivity (assembly
+       manual vs. screwdriver)
+    •  Skills vs Subagents: Methodology guidance vs. task delegation
+    Skills GUIDE agents. An agent without skills is like a grad student
+    without training. An agent with skills is like a grad student who has
+    internalized your lab's best practices.
+
+COMMENTARY
+
+Each of the four contrasts on this slide is about keeping the
+categories clean.
+
+*Skills vs. prompts.* A prompt is what you type; a skill is what lives
+on disk. The practical consequence is version control: a skill can be
+committed to git, shared with a lab, and reviewed in a pull request; a
+prompt cannot. When a lab wants to enforce a methodology across all its
+members, the unit of enforcement is the skill file in the shared
+repository, not the prompt in each person's head.
+
+*Skills vs. CLAUDE.md.* CLAUDE.md is loaded into every session in a
+directory. Its content becomes part of the agent's permanent system
+prompt for the life of the conversation. A skill is loaded on demand,
+when the agent identifies that the current task matches the skill's
+description. CLAUDE.md should contain only the things that apply to
+every task in the project; skills should contain everything that
+applies only to specific tasks. The "lab protocol vs. dress code"
+analogy captures this: a dress code applies always, a lab protocol
+applies when you are doing that particular experiment.
+
+The failure mode of putting workflow instructions in CLAUDE.md is
+context bloat. If CLAUDE.md contains every methodology the lab might
+ever want, the agent carries all of them in every session, and the
+important ones are diluted by the irrelevant ones. Skills are
+load-on-demand precisely to avoid this.
+
+*Skills vs. MCP (Model Context Protocol).* MCP is the protocol through
+which agents gain new tools: a Postgres MCP server gives the agent SQL
+execution; a GitHub MCP server gives the agent pull-request access; a
+Slack MCP server gives the agent messaging. MCP expands the set of
+*actions* the agent can take. Skills expand the set of *workflows*
+the agent can follow. They are complementary: a well-designed research
+setup has MCP servers for its data sources and tools, and skills for
+its methodologies, and the skills reference the MCP tools where
+appropriate. The "assembly manual vs. screwdriver" analogy is precise:
+skills tell the agent how to assemble the result, MCP gives the agent
+the screwdriver it needs to turn the screws.
+
+*A bridge from Session 2.* Participants who attended Michelle
+Audirac's Session 2 ("Hugging Face Workshop") worked through her
+Section 2, "Use Hugging Face MCP with Claude Code", which showed how
+to expose HuggingFace models --- datasets, transformers pipelines,
+SegFormer for image segmentation --- to Claude Code through the
+Model Context Protocol. That session gave you the *screwdriver* half
+of the analogy above: new tools in the agent's toolbelt. Today's
+session gives you the *assembly manual* half: the methodology that
+decides which tool to reach for and in what order. The two halves
+are designed to click together. A realistic post-workshop setup for
+a Harvard researcher looks like this: MCP servers from Session 2
+(HuggingFace, plus whatever domain tools you have added since) plus
+CLAUDE.md conventions from Session 3 plus skills from today, all
+composed in a single Claude Code session. None of the three layers
+replaces the others; each solves a different kind of problem.
+
+*Skills vs. subagents.* A subagent is a computational primitive: a
+separately-scoped agent instance invoked by its parent. A skill is a
+text artefact. They are on different axes. A subagent can be given a
+skill to follow; a skill can instruct the parent to spawn subagents.
+The math-olympiad skill in Section 4 is an example of a skill that
+orchestrates many subagents; the parent agent reads the skill, and the
+skill says "spawn eight solver subagents, then spawn two verifier
+subagents, then synthesize."
+
+The grad-student analogy on the last line is the one the slide deck
+returns to. A grad student without training is bright and confused; a
+grad student with training is bright and disciplined. The discipline
+is what makes them useful for publishable work. Skills are that
+discipline, externalized.
+
+--------------------------------------------------------------------------------
+SLIDE 17 — ANATOMY OF A SKILL.MD FILE
+--------------------------------------------------------------------------------
+
+SLIDE CONTENT (verbatim)
+    17/34
+    Anatomy of a SKILL.md File
+
+    ---
+    name: my-research-skill           # ← identifier & slash command
+    description: >                    # ← WHEN to activate (trigger phrases)
+      Opinionated workflow for X.
+      Use when asked to do Y or Z.
+    ---
+
+    # Skill Name                      # ← body: the actual instructions
+
+    ## Workflow overview              # ← sequential steps
+    1. **Think** -- Define the question
+    2. **Validate** -- Check assumptions   ⚠️ ASK USER
+    3. **Implement** -- Write the code
+    4. **Diagnose** -- Run checks
+
+    ## Critical rules                 # ← guardrails / iron laws
+    - Always do X before Y
+    - Never skip step 4
+
+    ## Common gotchas                 # ← hard-won domain knowledge
+    - Library Z silently ignores flag W
+    ...
+
+    Directory structure:
+    my-skill/
+    ├── SKILL.md        # required
+    ├── references/     # loaded on demand
+    │   └── details.md
+    └── scripts/        # executable tools
+        └── validate.py
+
+COMMENTARY
+
+The SKILL.md file has exactly three parts that matter, and each part is
+load-bearing.
+
+*Frontmatter.* The YAML block between the two `---` markers contains two
+fields: `name` and `description`. The name is both the identifier and
+(in Claude Code) the slash-command invocation; `name: data-analysis`
+means the user can type `/data-analysis` to invoke the skill
+explicitly. The description is how the agent decides whether the skill
+is relevant. When the user types a prompt, the agent compares the
+prompt against each skill's description and activates the skill if the
+description's trigger phrases match. This means the description must
+contain the phrases a user would actually write: "analyze a dataset",
+"review a paper", "build a Bayesian model". A description of "performs
+data work" will not trigger when the user says "could you explore this
+CSV for me".
+
+Description writing is a skill in itself and the most common source of
+silent skill failures. If your skill never seems to activate, the
+description is almost always the problem. The fix is to enumerate the
+likely phrasings and list them explicitly.
+
+*Body.* The body of the skill is the instructions, and its structure
+has converged (across baygent-skills, superpowers, the Anthropic
+official skills, and the agentskills.io spec) on three sections.
+
+The *Workflow* section is an ordered list of steps. Each step has a
+name, a short imperative description, and sometimes a checkpoint
+marker (`⚠️ ASK USER`, `⚠️ CONFIRM`, `⚠️ VERIFY`). The checkpoint
+markers are the skill's enforcement mechanism. When the agent reads
+"⚠️ CONFIRM", it knows it must halt and surface the current state to
+the user before proceeding. A skill with no checkpoints is a
+suggestion; a skill with checkpoints is a procedure.
+
+The *Critical rules* section is the iron-law list. These are the
+statements of the form "always do X" and "never do Y". They exist
+because when the agent is under time pressure --- when the user has
+asked for a quick answer, when the context is getting long, when the
+LLM's attention is elsewhere --- the checkpoints can be silently
+skipped. The critical rules are the backstop: even if every other
+section is forgotten, the critical rules must be obeyed. In practice,
+a skill with more than seven critical rules tends not to be followed
+consistently; between three and five is the sweet spot.
+
+The *Common gotchas* section is the externalization of hard-won
+domain knowledge. Each entry is typically of the form "when X, then
+Y, because Z" --- the failure mode, the correction, and the reason.
+Gotchas are the most valuable part of a skill because they are the
+knowledge that cannot be derived from any textbook; they are the
+knowledge that exists only because someone made the mistake once.
+When a lab adopts a skill, the gotchas section is the first thing
+people add to --- every bug that took an hour to debug becomes a
+gotcha entry, and subsequent agents and subsequent humans never need
+to rediscover it.
+
+*Directory structure.* A skill is typically a directory, not a
+single file. The directory contains SKILL.md (required) plus
+optional `references/` and `scripts/` subdirectories. The references
+directory holds long supporting documents that the agent loads only
+when relevant; this is the mechanism of *progressive disclosure*,
+which keeps the skill's top-level instructions concise while still
+providing depth when needed. The scripts directory holds executable
+utilities --- validators, plotters, test runners --- that the skill
+instructs the agent to invoke at specific steps. A SKILL.md that
+says "run `scripts/check_convergence.py` after sampling" is strictly
+more reliable than one that says "check convergence", because the
+script is deterministic and its output is a pass/fail signal the
+agent can act on.
+
+The progressive-disclosure idea deserves emphasis. A skill with
+everything crammed into SKILL.md is forced to choose between being
+too long (and diluting the important instructions) and being too
+short (and omitting the details that matter for hard cases).
+Progressive disclosure lets SKILL.md be short and pointed, while
+the references directory carries the depth. The agent reads the
+references only when it needs them, which keeps the context window
+manageable.
+
+================================================================================
+                          PART IV.  CASE STUDIES
+================================================================================
+
+--------------------------------------------------------------------------------
+SLIDE 18 — EXAMPLE 1: BAYESIAN WORKFLOW SKILL
+--------------------------------------------------------------------------------
+
+SLIDE CONTENT (verbatim)
+    18/34
+    Example 1: Bayesian Workflow Skill
+    baygent-skills · learnbayesstats.com · Workflow from Gelman et al. (2020,
+    arXiv:2011.01808)
+    1.  Formulate the generative story
+    2.  Specify priors (documented rationale, not "Normal(0,1) and vibes")
+    3.  Implement in PyMC 5+ (coords, dims, nutpie sampler)
+    4.  Prior predictive checks ← MANDATORY before sampling
+    5.  Inference (nutpie, reproducible descriptive seeds)
+    6.  Diagnose convergence (R̂ < 1.01, ESS, divergences, E-BFMI)
+    7.  Model criticism (posterior predictive + LOO-PIT calibration)
+    8.  Prior sensitivity (psense_summary)
+    9.  Compare models (LOO-CV, ELPD with SE, stacking weights)
+    10. Report (94% HDI, no frequentist language, companion markdown)
+    With skill (6/6 scenarios):     100%
+    Without skill:                   90.5%
+    Time cost of rigor:              +29%
+    Token cost:                      +87%
+
+COMMENTARY
+
+*This is the "doing math faster" example.* The workshop title promises
+"coding and doing math faster with LLMs and agentic workflows," and a
+reader who glanced at the event page might have expected a block of
+slides on symbolic proofs or computer algebra. For most researchers in
+the HDSI audience the math work that an agent can actually accelerate
+is statistical math: posterior inference, model comparison, sensitivity
+analysis, calibration. The Bayesian workflow skill is therefore not
+just "a case study of a skill"; it is the applied-math content of the
+workshop, made concrete. The 90.5% → 100% numbers in the evaluation
+are the "faster" claim cashed out as a measured improvement on a
+statistical task, and the ten steps below are the "math" content
+broken into pieces that an agent can actually execute.
+
+The Bayesian workflow skill is the canonical example, and it is worth
+taking each step seriously because each step encodes a lesson that the
+field learned the hard way.
+
+*Step 1. Formulate the generative story.* Before any code is written, the
+analyst describes in prose how they imagine the data were generated: what
+are the latent quantities, what are the observables, how are they
+connected. This step is the Bayesian equivalent of defining the
+experiment before running it, and it is skipped most often because it
+feels like discussion rather than work. In the skill, it is the first
+numbered step so that it cannot be skipped by construction.
+
+*Step 2. Specify priors with documented rationale.* The phrase "not
+'Normal(0,1) and vibes'" is a gentle slander of the default the
+unscaffolded agent will produce. A documented rationale means: "the
+prior on the coefficient is Normal(0, 2.5) because on the standardized
+scale a shift of more than five standard deviations is implausible for
+this biological mechanism." This is not extra work; it is the justification
+that any reviewer will eventually ask for.
+
+*Step 3. Implement in PyMC 5+ with coords, dims, and the nutpie sampler.*
+This is the skill making an opinionated choice. PyMC has supported
+coordinate and dimension labelling since version 3.9 (2020); the feature
+matured in v4 and is standard in PyMC 5, and it dramatically improves
+the interpretability of posterior summaries. The nutpie sampler (a Rust
+implementation of NUTS) is substantially faster and more robust in
+practice than the default Python implementation. The skill pins these
+choices so that every analysis the agent produces is on the same
+substrate and is comparable across runs.
+
+*Step 4. Prior predictive checks, marked MANDATORY.* This is the most
+important step in the skill because it is the step the unscaffolded
+agent skips. The prior predictive check draws samples from the prior,
+pushes them through the generative model, and produces synthetic data.
+If the synthetic data are manifestly implausible --- negative heights,
+probabilities outside [0,1], orders-of-magnitude-wrong counts --- the
+prior is wrong and must be revised. This check is cheap (no MCMC is
+involved), and it catches errors that would otherwise only be visible
+after a day of posterior exploration.
+
+*Step 5. Inference with nutpie and reproducible seeds.* The reproducible
+seed matters because Bayesian inference is stochastic and the skill
+promises reproducibility; the nutpie choice matters because NUTS with a
+bad sampler will produce divergences that look like model misspecification
+and waste time on a nonexistent problem.
+
+*Step 6. Convergence diagnostics with R-hat < 1.01, ESS, divergences, and
+E-BFMI.* The tighter 1.01 threshold is from Vehtari, Gelman, Simpson,
+Carpenter, and Bürkner (2021, *Bayesian Analysis*), which introduced a
+rank-normalized, split-chain R-hat and argued that the older 1.1 guideline
+(traceable to Brooks & Gelman 1998) is too permissive for modern
+practice. The effective
+sample size criterion ensures that posterior summaries are not dominated
+by autocorrelation. The divergence count guards against bias from the
+sampler's inability to explore high-curvature regions. The E-BFMI guards
+against funnel pathologies in hierarchical models. Any one of these
+failing is a reason not to interpret the posterior.
+
+*Step 7. Posterior predictive checks plus LOO-PIT calibration.* The
+posterior predictive check is the complement of the prior predictive
+check: after fitting, does the model reproduce features of the observed
+data? LOO-PIT is a calibration measure: if the model is well calibrated,
+the LOO-predicted ranks of the observations are uniform. A peaked
+LOO-PIT distribution means the model is overconfident.
+
+*Step 8. Prior sensitivity with psense_summary.* Prior sensitivity
+quantifies how much the posterior moves when the prior is perturbed. If
+the posterior is extremely sensitive to the prior, the data are not
+informative and the conclusions are fragile. `psense_summary` is the
+ArviZ utility that implements this; the skill names the tool so the
+agent does not have to guess.
+
+*Step 9. Model comparison via LOO-CV, ELPD with standard errors, and
+stacking weights.* Model comparison in the skill is not "pick the one
+with the highest LOO-ELPD"; it is "compare the ELPD difference to its
+standard error, and if they are of the same order, prefer the simpler
+model." This is the modern Bayesian model-selection norm and it is what
+prevents the agent from reporting a 0.1-ELPD win as a meaningful
+improvement.
+
+*Step 10. Report with 94% HDI, no frequentist language, and a companion
+markdown.* The 94% HDI (rather than 95%) is a community convention
+descending from McElreath's Statistical Rethinking; it is a reminder
+that the interval is a probability statement about the parameter, not
+a sampling-theoretic statement about the procedure. "No frequentist
+language" means no talk of p-values, Type I error, or confidence
+intervals; the posterior is a probability distribution and the
+report should describe it that way. The companion markdown is the
+human-readable record that the analysis actually produced.
+
+The empirical numbers on the slide come from an evaluation that
+Alex Andorra (the author of the baygent-skills bayesian-workflow
+skill) reported in the accompanying essay "Bayesian Workflow Agent
+Skill: PyMC + ArviZ" on learnbayesstats.com (March 16, 2026). The
+evaluation ran six held-out scenarios covering logistic regression,
+hierarchical models, troubleshooting, count data, model comparison,
+and prior elicitation. The unscaffolded agent scored 90.5% on average
+against an assertion-based rubric; the skill-armed agent scored 100%
+(6/6). Individual scenario scores without the skill ranged from 88%
+to 100%, which is worth knowing: the 90.5% average is not the result
+of a narrow miss in every scenario but of a small number of scenarios
+where the unscaffolded agent missed concrete checks (skipping coords
+and dims, reverting to frequentist language, failing to warn on
+hidden convergence problems). The cost of the rigor was approximately
+29% more wall-clock time and 87% more tokens per task. N = 6 is a
+small sample; the numbers should be read as directional evidence of a
+large effect rather than a precision estimate, and Appendix D
+tabulates the provenance.
+
+These numbers warrant interpretation. A reader might conclude that
+90.5% vs. 100% is a small improvement and the cost is not worth it.
+Two considerations push back. First, the failures in the unscaffolded
+case were not distributed randomly across minor polishes; the reported
+failures were of mandatory steps like prior predictive checks, and a
+single such failure can invalidate the entire analysis, making the
+90.5% average misleading as a "closeness" signal. Second, the 87%
+token cost is paid once per analysis and is dominated by diagnostic
+code that a careful analyst would have to write anyway. In that sense
+the rigor is not overhead; it is part of the analysis.
+
+Andorra's own framing of the problem, in the accompanying blog post,
+is worth quoting: the code runs, the plots render, "but the *analysis*
+is subtly, quietly wrong --- and that's the dangerous part. Not
+syntax errors. Not crashes." The skill exists to catch the wrongness
+that looks like correctness.
+
+--- Practical example: the baygent-skills repository ---
+
+The baygent-skills bayesian-workflow directory is the concrete
+reference implementation participants in this workshop should open,
+clone, and read. A full clone produces the following layout:
+
+    bayesian-workflow/
+    ├── README.md
+    ├── SKILL.md             (the file the agent reads)
+    ├── main.py
+    ├── pyproject.toml
+    ├── references/
+    │   ├── priors.md
+    │   ├── diagnostics.md
+    │   ├── model-criticism.md
+    │   ├── model-comparison.md
+    │   ├── hierarchical.md
+    │   ├── sensitivity.md
+    │   └── reporting.md
+    └── scripts/
+        ├── diagnose_model.py
+        └── calibration_check.py
+
+Every design idea discussed in this companion is observable in that
+directory. The frontmatter of SKILL.md declares the name and
+activation triggers. The body of SKILL.md holds the ten-step
+workflow, the critical rules, and the gotchas. The references/
+directory is the progressive-disclosure mechanism: seven topical
+markdown files that the agent loads only when the workflow step
+needs them (for example, references/sensitivity.md is loaded when
+the agent reaches Step 8 and needs to run prior sensitivity). The
+scripts/ directory holds two executable Python utilities that the
+skill instructs the agent to run as part of its workflow --- these
+are the "utility scripts" bullet in Slide 19.
+
+For a reader who has not yet written their own skill, the fastest
+way to internalize the pattern is:
+
+    git clone https://github.com/Learning-Bayesian-Statistics/baygent-skills
+    cd baygent-skills/bayesian-workflow
+    cat SKILL.md            # read the top-level instructions
+    ls references/          # see what gets loaded on demand
+    cat references/diagnostics.md
+    cat scripts/diagnose_model.py
+
+The repository is MIT licensed and is explicitly intended to be read,
+forked, and adapted. A participant whose research involves any
+Bayesian modelling can fork the repository, edit SKILL.md to match
+their lab's conventions (different HDI width, different sampler,
+different priors, different reporting template), and use the result
+as their own skill. The progressive-disclosure directories should be
+kept or pruned based on what depth the lab actually needs.
+
+Several features of the current SKILL.md (v1.2, by Alex Andorra,
+MIT licensed) are worth highlighting because they are less visible
+in a summary than they are in the file itself:
+
+- The convergence rule is compound: R̂ > 1.01 *or* ESS < 100 × chains
+  flags an unreliable fit. The skill does not let a clean R̂ mask a
+  low ESS, nor vice versa.
+- Reproducible random seeds are generated from the analysis name via
+  `sum(map(ord, "analysis-name"))`, so that two independent runs of
+  the same analysis use the same seed by construction.
+- The skill uses regularized (Finnish) horseshoe priors for
+  high-dimensional regression, with `target_accept ≥ 0.95` to handle
+  the resulting posterior geometry.
+- A gotcha warns that nutpie silently ignores log-likelihood and
+  log-prior storage; the skill instructs the agent to compute them
+  explicitly post-sampling so that downstream LOO-CV and prior
+  sensitivity still work.
+- A gotcha warns that flat scale priors in hierarchical models
+  produce funnel geometries; the skill recommends `Gamma(2, …)` or
+  `Exponential` in their place.
+- The critical rule "use posterior mean, never median, for predictive
+  probabilities" is in the file --- this is the rule added in v1.1
+  after the real-world stress test surfaced the median-as-expectation
+  bug (see Slide 19 commentary below).
+
+A participant who wants to understand how to structure a skill of
+their own will get more from twenty minutes of browsing this
+repository than from any template.
+
+--------------------------------------------------------------------------------
+SLIDE 19 — WHAT MAKES THIS SKILL GREAT
+--------------------------------------------------------------------------------
+
+SLIDE CONTENT (verbatim)
+    19/34
+    What Makes This Skill Great
+    •  Opinionated defaults: 94% HDI, nutpie sampler, reproducible seeds —
+       each justified
+    •  Guardrails: "Always run prior predictive checks BEFORE sampling" —
+       the #1 agent violation
+    •  15+ critical rules: R̂ < 1.01 (not outdated 1.1); recommend simpler
+       model when ELPD diff ≈ SE
+    •  Gotchas table: "Any divergences → do NOT interpret the posterior"
+    •  Progressive disclosure: references/ loaded only when needed; utility
+       scripts for diagnostics
+    Real-World Stress Test (v1.0 → v1.1)
+    A researcher tested on a hierarchical ordered logistic model — 5 European
+    football leagues, 10,000 matches, 30+ features. 3 critical bugs: (1)
+    posterior median instead of mean (violates probability coherence), (2) no
+    sparsity priors (regularized horseshoe needed for 30+ features), (3)
+    missing per-class calibration diagnostics. All fixed in v1.1 within one
+    week.
+    Synthetic evals caught obvious violations. Real-world use caught the
+    subtle ones.
+
+COMMENTARY
+
+The five properties on the top half of the slide are a checklist for
+evaluating any skill, not just this one.
+
+*Opinionated defaults.* Every choice the skill makes is explicit and
+justified. The skill does not say "choose a sampler"; it says "use
+nutpie because it is faster and more robust than the default." This
+is a cost: the skill is tied to the current best practice and must
+be updated when the best practice changes. It is also a benefit: the
+user reading the skill can see why each choice was made and is free
+to override it with full information.
+
+*Guardrails.* A guardrail is different from a rule in that it is
+specifically targeted at a known failure mode. "Always run prior
+predictive checks before sampling" is a guardrail because the known
+failure mode is "agents skip prior predictive checks". A skill
+written by someone with no experience of agent failures will not
+have guardrails; a skill iterated on real agent outputs will be full
+of them.
+
+*Fifteen-plus critical rules.* The rule count is a design decision:
+too few and the skill is under-specified, too many and the agent
+loses the forest for the trees. Fifteen is at the high end of what
+is followable; it is justifiable here because the Bayesian workflow
+is unusually dense with mandatory steps. A simpler skill should have
+three to five.
+
+*Gotchas table.* "Any divergences → do NOT interpret the posterior"
+is an example of a gotcha that encapsulates years of HMC folklore.
+It is the kind of knowledge that a first-year graduate student gets
+wrong and a fifth-year graduate student knows instinctively. The
+gotcha table transfers the fifth-year knowledge to the first-year's
+agent.
+
+*Progressive disclosure with references/ and scripts/.* The SKILL.md
+itself is kept short; the references directory holds longer
+explanations of topics like "how to choose a prior for a variance
+parameter" that are loaded only when the agent needs them; the
+scripts directory holds validators that the skill invokes at
+specific steps.
+
+The "real-world stress test" section is the instructive heart of
+this slide, and it is documented in Andorra's follow-up essay
+"Bayesian Workflow Skill: Real-World Stress Test (v1.1)" on
+learnbayesstats.com (March 23, 2026). The evaluation against six
+synthetic scenarios passed at v1.0. Andorra then applied the skill to
+a real problem of his own: the *Soccer Factor Model* (SFMMO), an
+ordered logistic hierarchical model predicting match outcomes across
+five European football leagues over roughly 10,000 matches, with
+more than thirty features. Three critical bugs surfaced.
+
+Bug 1, in Andorra's own words: "The skilled agent computed
+out-of-sample predictions by taking the **median** of posterior
+predictive probabilities across samples. This is wrong." Medians do
+not commute with nonlinear transforms, so the median of posterior
+predictive probabilities is not the probability of the outcome under
+the posterior; using it breaks the coherence between the reported
+point prediction and the underlying distribution. Fix in v1.1: a new
+critical rule, "always use the posterior mean (not median) for
+predictive probabilities", plus an instruction to use
+`pm.set_data()` with `pm.sample_posterior_predictive()` rather than
+hand-rolling the prediction loop.
+
+Bug 2: for high-dimensional regression the skill lacked guidance on
+sparsity priors. Andorra explicitly cites Piironen and Vehtari (2017)
+on the regularized horseshoe --- this is the paper the companion
+references in Appendix A. Fix in v1.1: a new section on sparsity
+priors with templates for the regularized (Finnish) horseshoe, and
+an accompanying critical rule that uses `target_accept ≥ 0.95` to
+manage the posterior geometry it induces.
+
+Bug 3: for ordered classification, the skill's diagnostic step did
+not include per-class calibration plots or temporal out-of-sample
+breakdowns. Aggregate calibration can look good while individual
+classes are miscalibrated, and the SFMMO case showed exactly that.
+Fix in v1.1: new classification evaluation helpers including
+expected calibration error (ECE) and per-class calibration plots,
+surfaced as a step in the model-criticism phase.
+
+All three fixes landed in v1.1 within roughly a week of the stress
+test (the repository is currently at v1.2). Andorra's summary of the
+experience is worth quoting verbatim because it is shorter and
+sharper than any paraphrase: "Evals are necessary. They're not
+sufficient." Synthetic benchmarks caught what was predictable;
+real-world use caught what was not. The general principle for skill
+engineering is that a skill is never finished, and the feedback loop
+between real-world use and skill revision is the mechanism of
+long-term improvement. Every skill should have a changelog; every
+changelog entry should point to the problem that motivated the
+revision, and ideally to the primary source that justifies the fix.
+
+--------------------------------------------------------------------------------
+SLIDE 20 — EXAMPLE 2: CAUSAL INFERENCE SKILL
+--------------------------------------------------------------------------------
+
+SLIDE CONTENT (verbatim)
+    20/34
+    Example 2: Causal Inference Skill
+    baygent-skills · "The thinking-first design" · PyMC + CausalPy + DoWhy
+
+    THINKING PHASE (no code)
+        → 1. Formulate causal question
+        → 2. Draw the DAG        ⚠️ CONFIRM
+        → 3. Identify strategy   ⚠️ CONFIRM
+        → 4. Choose design       ⚠️ CONFIRM
+
+    DOING PHASE
+        → 5. Estimate model
+        → 6. Mandatory refutation tests
+        → 7. Interpret with intervals
+        → 8. Report assumptions first
+
+    With skill (6/6 scenarios): 100%
+    Without skill:              68%
+    Gap from reasoning alone:   32 points
+
+    Key rule: "No estimation without a confirmed DAG."
+    The 32-point gap is entirely reasoning discipline.
+    Skills compose — delegates PyMC work to bayesian-workflow.
+
+COMMENTARY
+
+The causal inference skill is the most pedagogically important of the
+four case studies because it shows a skill that provides almost no
+technical machinery --- every tool it uses is already in CausalPy,
+DoWhy, or PyMC --- and yet produces a 32-percentage-point improvement
+on a benchmark. The entire improvement comes from imposing discipline
+on reasoning, and this is the clearest empirical demonstration that
+the bottleneck in agent-assisted science is not tool availability but
+procedural discipline.
+
+The two-phase structure --- Thinking Phase and Doing Phase --- is the
+skill's central design choice and is lifted directly from the causal
+inference literature. The Thinking Phase is the part where the
+analyst (human or agent) decides what question is being asked, what
+assumptions are being made, and what strategy is justified by those
+assumptions; the Doing Phase is where the computation happens. In
+most analysts' practice these phases are interleaved, and the
+interleaving is where mistakes happen: the analyst starts fitting a
+model before the DAG is clear, discovers that the model does not fit
+the data, adjusts the model, and in the adjustment loses track of
+what assumption was originally justified. The skill enforces
+separation.
+
+*Step 1. Formulate the causal question.* A causal question has a
+specific form: "what is the effect of X on Y in population P, under
+intervention I?" Most research questions are stated in a vague form
+("does X affect Y?") that cannot be answered without further
+specification. The skill's first step is to force the specification.
+
+*Step 2. Draw the DAG (confirmed by the user).* The DAG is a
+directed acyclic graph in which nodes are variables and edges are
+causal relationships hypothesized by the analyst. The DAG is not a
+data summary; it is a statement of prior causal beliefs. The ⚠️ CONFIRM
+marker means the agent must present the DAG to the user and obtain
+explicit approval before proceeding. This is non-negotiable: the
+DAG encodes the analyst's causal beliefs, and the agent is not the
+analyst.
+
+*Step 3. Identify the strategy (confirmed by the user).* Given the
+DAG, multiple identification strategies may be available:
+back-door adjustment, front-door adjustment, instrumental variables,
+difference-in-differences, regression discontinuity. The strategy is
+chosen by inspecting the DAG for the set of variables that blocks
+all back-door paths from treatment to outcome. This is a formal
+procedure (do-calculus) and the agent can perform it, but the human
+must confirm the result because a wrong DAG produces a wrong
+strategy and the wrong strategy cannot be diagnosed from data alone.
+
+*Step 4. Choose the design (confirmed by the user).* The design is
+the specific statistical model that implements the identification
+strategy: a regression, a propensity-score model, a Bayesian
+hierarchical model with CausalPy, a synthetic control, etc. The
+agent can propose; the human confirms.
+
+*Step 5. Estimate the model.* Only now is code written. Note that
+by this point the DAG, the strategy, and the design have all been
+confirmed, and the code is merely the execution of a plan that has
+already been validated. The cost of writing code on a confirmed plan
+is low; the cost of writing code on an unconfirmed plan is the
+revision cycle.
+
+*Step 6. Mandatory refutation tests.* Refutation tests are
+experiments that would falsify the estimate if the assumptions are
+wrong: placebo outcomes, negative controls, random common causes,
+unobserved confounder bounds. DoWhy provides a suite of these out
+of the box. The skill makes them mandatory because they are the
+only mechanism by which the analysis can be distinguished from a
+data-fitting exercise.
+
+*Step 7. Interpret with intervals.* Causal effects are estimated
+with uncertainty; the skill forbids point-only reporting. Intervals
+may be credible (from a Bayesian model), bootstrap (from a frequentist
+one), or analytical, but they must be present.
+
+*Step 8. Report assumptions first.* The report begins with the
+assumptions, not the estimate. This is the deepest philosophical
+choice in the skill, and it is lifted from the causal inference
+literature's gold standard. A report that begins with the estimate
+invites the reader to accept the estimate as a fact; a report that
+begins with the assumptions invites the reader to evaluate whether
+the assumptions are plausible and, if they are, to accept the
+estimate as the conclusion that follows. The ordering is a
+correction to the natural incentive structure of publication, which
+rewards clean estimates.
+
+The empirical comparison is stark. Without the skill, Claude fitted
+a plausible-looking regression for every question and called it
+done, passing 68% of scenario checks. With the skill, the agent
+refused to estimate until the DAG was drawn, and the DAG revealed in
+several cases that the naive regression was biased; the skill-armed
+agent passed 100%. The 32-percentage-point gap is reasoning
+discipline, not technical machinery.
+
+The note about composition --- "skills compose: delegates PyMC work
+to bayesian-workflow" --- is important. A skill does not need to
+re-derive everything from scratch; it can reference another skill
+and delegate. The causal inference skill, at Step 5, tells the agent
+to invoke the Bayesian workflow skill when the design is Bayesian.
+This is the skills ecosystem starting to look like a package
+ecosystem: composable, versioned, interdependent.
+
+To paraphrase the learnbayesstats essay on which this slide is
+based: the gap between a good causal analysis and a bad one is
+almost never in the code; it is in the reasoning. The skill enforces
+the reasoning. "Earn the right to say 'causes'" is the philosophical
+claim; the eight-step workflow is the operational procedure that
+earns it.
+
+--------------------------------------------------------------------------------
+SLIDE 21 — EXAMPLE 3: SOFTWARE ENGINEERING SKILLS
+--------------------------------------------------------------------------------
+
+SLIDE CONTENT (verbatim)
+    21/34
+    Example 3: Software Engineering Skills
+    github.com/obra/superpowers
+
+    Test-Driven Development
+        → "NO PRODUCTION CODE WITHOUT A FAILING TEST FIRST"
+        → Enforces RED → GREEN → REFACTOR
+        → Code before tests? Delete + redo.
+        → The discipline even experts skip.
+
+    Systematic Debugging
+        → "NO FIXES WITHOUT ROOT CAUSE INVESTIGATION FIRST"
+        → 4 phases: Investigate → Analyze → Hypothesize → Implement
+        → 3+ failed fixes? Question the arch.
+
+    Iron laws prevent the most common and most dangerous shortcuts.
+
+COMMENTARY
+
+The superpowers repository is Jesse Vincent's collection of
+software-engineering skills; its two flagship entries are the TDD
+skill and the systematic-debugging skill, and each is built around
+a single "iron law" that the skill enforces absolutely.
+
+*Test-Driven Development.* The iron law is "no production code
+without a failing test first." The RED → GREEN → REFACTOR cycle
+means: write a test that fails (RED), write the minimum production
+code that makes it pass (GREEN), then refactor both the test and
+the code without breaking anything (REFACTOR). TDD is the discipline
+whose benefits are most celebrated in software engineering pedagogy
+and least practiced in research software, because in research the
+incentive to "just make it work" is immediate and the incentive to
+"make it testable" is deferred. An agent that writes code without a
+test first is producing exactly the code the research community
+complains about when a paper's results do not reproduce.
+
+The "code before tests? delete and redo" rule is severe on
+purpose. The reason is that if the agent is allowed to write code
+and then "add tests later", the tests will be written to match the
+code's behavior rather than the code's specification, and they will
+catch nothing. The only way for tests to be genuine is for them to
+have been written before the code they constrain. This is a lesson
+software engineering learned in the 2000s; the skill transfers it
+to agent-written code in the 2020s.
+
+*Systematic Debugging.* The iron law is "no fixes without root
+cause investigation first." The four phases --- Investigate,
+Analyze, Hypothesize, Implement --- are a formalization of what
+experienced debuggers do and what inexperienced debuggers skip.
+The inexperienced pattern is "see an error, try a fix, see if it
+works, repeat"; this is stochastic gradient descent in the space
+of code changes and it can take hours to converge on bugs that
+could be fixed in minutes with a disciplined investigation.
+
+The "3+ failed fixes → question the architecture" heuristic is
+the most valuable single rule in the debugging skill. When an
+agent (or a human) has tried three fixes and none has worked, the
+bug is almost always not where the symptom appeared; it is in a
+structural assumption that all three fixes shared. The rule forces
+the agent to zoom out.
+
+The closing sentence --- "iron laws prevent the most common and
+most dangerous shortcuts" --- is the right framing. Skills do not
+prevent unusual failures; unusual failures are by definition not
+predictable. Skills prevent the common ones, the failures that
+happen over and over, the shortcuts that are taken not because
+the practitioner doesn't know better but because the shortcut is
+what the moment seems to demand.
+
+--------------------------------------------------------------------------------
+SLIDE 22 — EXAMPLE 4: MATH OLYMPIAD SKILL (THE CEILING)
+--------------------------------------------------------------------------------
+
+SLIDE CONTENT (verbatim)
+    22/34
+    Example 4: Math Olympiad Skill (The Ceiling)
+    1.  Interpretation check — catch ambiguous problem readings
+    2.  8–12 parallel solver agents (thinking only, no tools)
+    3.  Strip thinking traces before verification
+    4.  Fresh adversarial verifiers (blind to solver reasoning)
+    5.  Asymmetric voting (4 to confirm, 2 to refute)
+    6.  Revision cycles (up to 3 rounds)
+    7.  Calibrated abstention — "no confident solution" rather than bluff
+    8.  Presentation pass (LaTeX/PDF output)
+    400+ line skill orchestrating multiple subagents. This is the ceiling,
+    not the floor. Your first skill can be 20 lines.
+
+COMMENTARY
+
+The math-olympiad skill, originally developed by Anthropic as an
+official plugin, is included as an example not because most
+participants will ever write a skill like it but because it
+demonstrates how far the paradigm can be pushed. Each of its eight
+steps is worth describing briefly.
+
+*Step 1. Interpretation check.* Olympiad problems are frequently
+ambiguous on first reading. The skill's first step is to generate
+multiple possible readings of the problem and ask the user to
+confirm which is intended. This is a failure mode that human
+olympiad coaches know well: the student solves the wrong problem
+because they read it wrong in the first ten seconds.
+
+*Step 2. Eight-to-twelve parallel solver agents.* The skill spawns
+many subagents, each asked to solve the problem independently. They
+are "thinking only, no tools" because olympiad problems are pure
+reasoning and tool use is a distraction. The parallelism exploits
+the stochasticity of LLM sampling: different sampling trajectories
+find different approaches, and the best of many is much better than
+the best of one.
+
+*Step 3. Strip thinking traces before verification.* This is a
+subtle but critical step. When the solvers' outputs are passed to
+the verifiers, the verifiers must see only the final proofs, not
+the solvers' thinking traces. If the verifier sees the thinking,
+it anchors on the solver's reasoning and fails to catch errors. By
+stripping the trace, the skill forces the verifier to reconstruct
+the reasoning from scratch and catch errors the solver missed.
+
+*Step 4. Fresh adversarial verifiers.* The verifiers are new
+subagents, blind to the solver reasoning, instructed to find
+errors. Adversarial framing is important because the default LLM
+tendency is to agree; "find what is wrong with this proof" elicits
+different behaviour from "does this proof look right".
+
+*Step 5. Asymmetric voting (4 to confirm, 2 to refute).* It should
+take more verifiers to accept a proof than to reject one. This
+asymmetry is a decision-theoretic choice: the cost of accepting a
+wrong proof (publishing a wrong result) is much higher than the
+cost of rejecting a right one (redoing the work). The skill encodes
+this cost asymmetry.
+
+*Step 6. Revision cycles.* Up to three rounds of solver-verifier
+iteration are permitted; after the third, the skill escalates to
+abstention rather than continue to iterate, because the probability
+of converging decreases with each round.
+
+*Step 7. Calibrated abstention.* The skill tells the agent it is
+allowed to say "no confident solution." This is the feature that
+most distinguishes the skill from a naive agent: the naive agent
+always produces an answer because producing an answer is what
+agents do, while the skill-guided agent refuses when it cannot
+justify the answer. Calibrated abstention is to olympiad math what
+"no estimation without a DAG" is to causal inference.
+
+*Step 8. Presentation pass.* The final step is a presentation pass
+that renders the accepted proof as LaTeX or PDF. This is
+cosmetic but important: the user receives a polished artefact, not
+raw markdown.
+
+The skill is 400+ lines long and orchestrates multiple subagents
+with delicate inter-agent communication protocols. It is the
+ceiling of what is currently achievable with skills, and it should
+not be the model for a first skill. A first skill can be twenty
+lines. The point of showing the ceiling is to reassure participants
+that the paradigm scales; the point of the "your first skill can
+be 20 lines" reminder is to prevent them from being intimidated
+into not writing one at all.
+
+--------------------------------------------------------------------------------
+SLIDE 23 — THE EMERGING SKILLS ECOSYSTEM
+--------------------------------------------------------------------------------
+
+SLIDE CONTENT (verbatim)
+    23/34
+    The Emerging Skills Ecosystem
+    •  Agent Skills Spec — a cross-platform standard (agentskills.io)
+    •  Same skill works in: Claude Code, Cursor, Kimi Code, Gemini CLI
+    •  OpenClaw's SKILL.md — per-tool instruction files for agents
+    •  baygent-skills — Bayesian + causal inference skills (MIT licensed)
+    •  obra/superpowers — Software engineering skills collection
+    •  Anthropic official plugins — math-olympiad, skill-creator,
+       frontend-design
+    Skills are becoming a standard — like packages for methodology.
+
+COMMENTARY
+
+The ecosystem slide is a snapshot of the situation as of early 2026.
+Several things about that snapshot are worth noting.
+
+First, there is convergence on a single format. The
+agentskills.io specification defines a SKILL.md file with a
+specific frontmatter schema, and this schema is implemented by
+multiple agent runtimes. A skill written for Claude Code will also
+run, with no changes, in Cursor, Kimi Code, and Gemini CLI. This
+cross-platform property is the property that turns skills from a
+product feature into a community standard.
+
+Second, the ecosystem is being built by different kinds of
+organizations in parallel. baygent-skills is maintained by a
+Bayesian statistics education community (the authors of the
+Learning Bayesian Statistics podcast). obra/superpowers is
+maintained by an individual software engineer. The Anthropic
+official plugins are maintained by the company that builds
+Claude. Each of these communities is writing the skills their
+constituency needs, and the fact that the skills are
+interchangeable across runtimes means a Bayesian statistician can
+adopt the superpowers TDD skill without changing agents.
+
+Third, skills are licensed. The baygent-skills repository is MIT
+licensed, which means anyone can adapt, fork, or redistribute it.
+This matters because it establishes the norm: skills are shared
+knowledge, not proprietary assets.
+
+The comparison to packages is the right mental model. Python's
+NumPy is not a feature of CPython; it is a package published to
+PyPI under an open license, maintained by a community, versioned,
+and depended on by other packages. Skills will have the same
+structure: published to a registry, versioned, composable, and
+depended on by other skills.
+
+*A terminology warning.* The filename `SKILL.md` is now used by at
+least two different ecosystems with different meanings, and a
+participant who reads both will be briefly confused. In the Claude
+Code / baygent-skills / agentskills.io lineage that this companion
+treats, a SKILL.md encodes a *methodology*: steps, checkpoints,
+critical rules, gotchas. In the OpenClaw / MoltBook lineage
+presented at the MIT/Harvard AI Agents workshop (Imagination in
+Action, April 9, 2026, the day before ours), SKILL.md is instead a
+per-tool *how-to* file, "markdown instructions that teach an agent
+how to use a tool or API", with dozens shipping by default in
+OpenClaw's harness. Both conventions are legitimate; they are just
+naming different artefacts. A skill in the first sense is closer to
+a lab protocol; a skill in the second sense is closer to a man
+page. If you encounter the filename in a new codebase, open it and
+read the first section to determine which of the two you are
+looking at.
+
+*An honest counterargument.* Not everyone in the agents community
+thinks the skills-as-methodology paradigm is necessary. Mario
+Zechner, author of OpenClaw's "Pi" harness, argues for what he
+calls *radical minimalism*: "All frontier models have been
+RL-trained extensively --- they inherently understand what a coding
+agent is." On that view, the model already knows what bash is, how
+files work, and what a well-run analysis looks like, so wrapping it
+in a skill with a long SKILL.md just wastes context tokens on
+instructions the model would have followed anyway. Pi ships with
+four tools (read, write, edit, bash), a system prompt under a
+thousand tokens, and no plan mode, subagents, or MCP support by
+design. The contrarian position is worth stating plainly because it
+is defensible for some workloads: if your task really is generic
+coding and the model's default behaviour is what you want, adding a
+skill is overhead. The case for skills is strongest exactly where
+the default behaviour is wrong --- where the training data is
+dominated by a convention you do not want (the Bayesian workflow's
+"Normal(0,1) and vibes" default, for instance), or where a
+guardrail is easy to state but hard to enforce without a written
+rule. In that sense the two philosophies are not opposed; they
+describe different regions of the task space. Radical minimalism is
+the right default for tasks the model already does well; skills are
+the intervention for tasks where it does not.
+
+================================================================================
+                        PART V.  AUTHORING SKILLS
+================================================================================
+
+--------------------------------------------------------------------------------
+SLIDE 24 — CREATING SKILLS IS JUST MARKDOWN
+--------------------------------------------------------------------------------
+
+SLIDE CONTENT (verbatim)
+    24/34
+    Creating Skills — It's Just Markdown
+
+        # Create the skill directory
+        mkdir -p ~/.claude/skills/my-skill/
+
+        # Write the SKILL.md (use any editor — or ask Claude Code!)
+        # "Help me create a skill for [your workflow]"
+
+        # Restart Claude Code to load the new skill
+
+        # Then invoke it:
+        /my-skill
+
+        # Or just describe a task — Claude auto-activates matching skills
+        "Help me analyze this dataset using our lab's methodology"
+
+    Pro tip: use /skill-creator — it's a meta-skill that helps you build
+    and evaluate new skills. It interviews you, writes a draft, creates test
+    cases, and iterates.
+
+COMMENTARY
+
+The mechanical process of creating a skill is startlingly simple, and
+this simplicity is the design's most important feature. A skill is a
+directory in `~/.claude/skills/` containing a SKILL.md file with
+frontmatter. That is all. There is no build step, no registration
+ritual, no database. The reason this matters is that the cost of
+writing a skill must be low enough that researchers will write them
+as a side effect of ordinary work; if writing a skill required
+setting up a project, the paradigm would not take hold.
+
+The restart instruction is important because Claude Code caches the
+skill list at startup. If you write a new skill in a running session,
+the agent will not see it until the session is restarted. This is a
+small friction but a frequent source of confusion; the fix is always
+"restart Claude Code".
+
+The invocation model has two paths. The explicit path is to type
+`/my-skill`, which activates the skill unconditionally. The implicit
+path is to describe the task in natural language and let the agent
+match the description against the skill's frontmatter description.
+The implicit path is the one you want for ordinary use; it means the
+user doesn't have to remember which skill applies to which task, and
+the agent will pull in the right skill as soon as the task matches.
+This is why the description field is so important: it is the
+matching key.
+
+The pro tip --- use `/skill-creator` --- is the meta-observation that
+writing a skill is itself a task, and the task has a methodology,
+and that methodology can be a skill. The skill-creator skill
+interviews the user about the workflow to be encoded, writes a
+draft SKILL.md, generates test scenarios, runs them against an
+unscaffolded agent and a scaffolded one, and iterates. It is an
+example of skills all the way down, and it is the fastest path from
+"I have a workflow" to "I have a tested skill".
+
+*A note for Harvard participants.* Session 3 configured Claude Code
+to call models through the Harvard HUIT Bedrock endpoint rather than
+Anthropic's public API. Skills are orthogonal to that choice: the
+`~/.claude/skills/` directory lives on your local filesystem, is
+read by the Claude Code client at startup, and is applied regardless
+of which backend the client is talking to. Nothing in the Session 3
+setup needs to be redone. A participant who set up Bedrock last week
+can write a SKILL.md today and it will activate on the next
+`claude` invocation.
+
+--------------------------------------------------------------------------------
+SLIDE 25 — THINKING ABOUT YOUR RESEARCH
+--------------------------------------------------------------------------------
+
+SLIDE CONTENT (verbatim)
+    25/34
+    Thinking About YOUR Research
+    1.  What task do you do repeatedly? (data cleaning, model fitting,
+        writing, reviewing...)
+    2.  What steps does your advisor/PI always remind you about?
+        → Those are your critical rules.
+    3.  What mistakes have you made that you wish you'd been warned about?
+        → Those are your common gotchas.
+    4.  What would a new lab member need to know to do this task correctly?
+        → That IS your skill.
+
+COMMENTARY
+
+This slide is the pivotal instructional moment in the session. Every question on it is a method for eliciting skill
+content from the researcher's own experience, and in the hands-on
+portion each question maps directly to a section of the template.
+
+*What task do you do repeatedly?* The test for whether a workflow
+deserves a skill is repetition. A one-time analysis does not justify
+the effort of writing a skill; a task you have done (or will do)
+three times does. In practice, researchers underestimate how much of
+their work is repeated. The exercise here is to list every distinct
+technical workflow performed in the last month --- data cleaning,
+model fitting, literature review, figure generation, paper
+submission --- and ask which ones will be repeated. Any task on that
+list with a frequency greater than "once" is a skill candidate.
+
+*What steps does your advisor/PI always remind you about?* The
+advisor's reminders are the critical rules, because an advisor's
+reminders are themselves the externalization of the lab's
+community knowledge. When your advisor says "don't forget to
+check for multicollinearity before interpreting coefficients", that
+sentence is a critical rule verbatim. The exercise is to recall the
+last three reminders you received and write them down.
+
+*What mistakes have you made that you wish you'd been warned
+about?* The mistakes are the common gotchas. A gotcha is
+distinguished from a rule in that it describes a specific failure
+and the specific correction; "pandas.read_csv silently parses
+dates as strings unless parse_dates is set, which will cause your
+time-series plots to look monotonic-in-filename order" is a
+gotcha because it describes the symptom, the cause, and the fix.
+The exercise is to recall the last three bugs that took more than
+an hour to debug and convert them into gotcha entries.
+
+*What would a new lab member need to know to do this task
+correctly?* This is the aggregation question and it is the one
+that, when answered honestly, produces the skill. The exercise is
+to imagine a first-year graduate student joining the lab tomorrow
+and being handed this task. What would you want them to read
+before they started? The answer is the skill.
+
+These four questions are designed to be completed in five minutes.
+Participants in the workshop were asked to answer them in writing
+before proceeding to the template.
+
+--------------------------------------------------------------------------------
+SLIDE 26 — EXAMPLE: LITERATURE REVIEW SKILL
+--------------------------------------------------------------------------------
+
+SLIDE CONTENT (verbatim)
+    26/34
+    Example: Literature Review Skill
+
+    ---
+    name: literature-review
+    description: >
+      Systematic literature review workflow. Use when asked to review
+      literature, find related work, or prepare a related work section.
+    ---
+
+    # Literature Review
+
+    ## Workflow
+    1. **Define scope** -- research question, inclusion/exclusion  ⚠️ CONFIRM
+    2. **Search strategy** -- key terms, databases, search strings
+    3. **Screen results** -- extract, classify, note key findings
+    4. **Synthesize themes** -- group by theme, identify gaps
+    5. **Critical assessment** -- design strengths, biases, limits
+    6. **Write summary** -- landscape → themes → gaps → references
+
+    ## Critical rules
+    - Never fabricate citations. If uncertain, say so explicitly.
+    - Always note the search date.
+    - Distinguish claims from evidence.
+
+COMMENTARY
+
+The literature review skill is a deliberately small example. It has
+six workflow steps, three critical rules, and zero gotchas, and it
+fits on a single slide. It is included to show what a first skill
+can look like, and to normalize the smallness.
+
+Each design choice is worth a brief comment.
+
+*Scope with confirm.* The first step has a ⚠️ CONFIRM marker
+because scope creep is the most common failure of literature
+reviews. An agent asked to "review the literature on X" will
+often return results on X, X-adjacent, and a tangent that was more
+interesting than X. The confirmation forces the agent to state the
+scope in writing and have the user approve it before any searching
+begins.
+
+*Search strategy as a discrete step.* The search strategy is not
+the search itself; it is the declaration of key terms, databases,
+and search strings that will be used. This is the step that makes
+the review reproducible. Without this step, "how did you find
+these papers" has no answer.
+
+*Screen, synthesize, assess as separate steps.* Screening is
+mechanical (did this paper make it through the inclusion criteria);
+synthesis is thematic (what do the included papers tell us
+together); critical assessment is evaluative (are the included
+papers any good). Conflating these three is the most common error
+in novice literature reviews, and the skill separates them so the
+agent cannot conflate them either.
+
+*Write summary with a specific structure.* The "landscape → themes
+→ gaps → references" ordering is the convention in most scientific
+literature review sections and it gives the agent a target shape
+for the output.
+
+*Critical rule: never fabricate citations.* This is the iron law.
+LLM-written literature reviews are notorious for fabricated
+citations; a skill that forbids fabrication --- and, more
+importantly, instructs the agent to explicitly note uncertainty
+when it is unsure --- eliminates the failure mode. In practice this
+rule must be enforced with a secondary verification step (checking
+each cited DOI or arXiv ID is resolvable), and a robust skill would
+include that step explicitly.
+
+*Critical rule: always note the search date.* Search results are
+time-dependent; a review that does not note when the search was
+performed cannot be updated or audited.
+
+*Critical rule: distinguish claims from evidence.* A paper's
+claim ("method X improves accuracy") and the evidence for it
+("Table 3 shows a 2% improvement on benchmark Y") are different
+objects. The skill forbids conflating them.
+
+*Related tools: deep research.* The literature-review skill
+automates the *structure* of a review --- scope, screen,
+synthesize, assess, write --- but the search phase itself is best
+served by dedicated "deep research" tools that crawl, read, and
+summarize literature on their own. As of April 2026 the main
+options a Harvard researcher will encounter, in alphabetical order,
+are:
+
+- *Elicit* (elicit.com) --- academic-paper-first, optimized for
+  systematic-review workflows and extraction tables.
+- *Gemini Deep Research* (inside Gemini Advanced) --- Google's
+  agentic research mode; good integration with Google Scholar and
+  with NotebookLM.
+- *NotebookLM* (notebooklm.google.com) --- the tool Session 1 of
+  this series already introduced; strongest when you supply the
+  source documents yourself and want grounded synthesis.
+- *OpenAI Deep Research* (inside ChatGPT) --- agentic literature
+  search producing citation-rich long-form reports; strong on
+  breadth, weaker on paywalled content.
+- *Perplexity Deep Research* (perplexity.ai) --- web-first with
+  inline citations; fast and broad, but grounding varies by source
+  quality.
+
+None of these replaces the literature-review skill; they *feed*
+it. A realistic workflow is: run one of the deep research tools to
+get a first pass of candidate papers, then invoke the
+literature-review skill in Claude Code to screen, synthesize, and
+write the section under the skill's discipline. The skill's "never
+fabricate citations" rule applies with particular force here: deep
+research tools can and do surface papers that do not exist, and the
+verification step must be part of the skill's workflow, not an
+afterthought.
+
+--------------------------------------------------------------------------------
+SLIDE 27 — EXAMPLE: DATA ANALYSIS SKILL
+--------------------------------------------------------------------------------
+
+SLIDE CONTENT (verbatim)
+    27/34
+    Example: Data Analysis Skill
+
+    ---
+    name: data-analysis
+    description: >
+      Structured data analysis workflow for quantitative research.
+      Use when asked to analyze a dataset or build statistical models.
+    ---
+
+    # Data Analysis Workflow
+
+    ## Workflow
+    1. **Understand** -- data dictionary, types, units, missingness
+    2. **Explore** -- summary stats, distributions, correlations, outliers
+    3. **Hypothesize** -- write expectations before modeling  ⚠️ CONFIRM
+    4. **Specify model** -- choose family, document rationale
+    5. **Fit + diagnose** -- residuals, influence, VIF
+    6. **Validate** -- hold-out or cross-validation
+    7. **Visualize** -- publication-quality, labeled, sourced
+    8. **Report** -- effect sizes + CIs, not just p-values
+
+    ## Critical rules
+    - Never drop observations without documenting why.
+    - Always check assumptions before interpreting.
+    - Save intermediates to disk — don't rely on notebook state.
+
+COMMENTARY
+
+The data analysis skill is slightly larger than the literature review
+skill --- eight workflow steps, three critical rules --- and it is
+the skill most participants will find closest to their own work.
+
+*Understand before explore.* Step 1 is reading the data
+dictionary, checking types, verifying units, and measuring
+missingness. This is before any summary statistics are computed,
+because summary statistics on mis-typed data are meaningless, and
+units that are off by a factor of 1000 will invalidate every
+downstream step. "Understand" is the intellectual equivalent of
+washing your hands before surgery.
+
+*Explore with a specific agenda.* "Summary stats, distributions,
+correlations, outliers" is a specific list, not a vague
+instruction. The skill tells the agent what to explore, because
+the default behavior of an unconstrained agent is to explore only
+the first two columns and move on.
+
+*Hypothesize with confirmation.* The third step is the most
+distinctive. Before any model is specified, the skill asks the
+agent to write down what the agent *expects* the data to show
+--- and to confirm this expectation with the user. This is the
+data analysis equivalent of pre-registration: it creates a record
+of the a priori belief, against which the posterior result can be
+compared. When the result matches the expectation, the conclusion
+is strengthened; when it does not, the analyst is forced to
+explain the discrepancy rather than pretending the unexpected
+result was always what they were looking for.
+
+*Specify, fit-and-diagnose, validate, visualize, report.* The
+remaining five steps are the conventional arc of a statistical
+analysis, with specific diagnostic requirements: VIF for
+collinearity, residuals for model fit, influence measures for
+outlier leverage, holdout for out-of-sample generalization, effect
+sizes and confidence intervals rather than p-values for
+reporting. Each of these is a place where the unconstrained agent
+will take a shortcut.
+
+*Critical rule: never drop observations without documenting why.*
+Quiet dropping of observations is the fastest way to introduce
+unintentional bias. The rule does not forbid dropping; it
+requires documentation. A skill cannot prevent the analyst from
+making a bad decision, but it can ensure the bad decision is
+visible.
+
+*Critical rule: always check assumptions before interpreting.*
+Assumption checking is the step that determines whether the
+interpretation is meaningful. The rule forces the check to come
+first.
+
+*Critical rule: save intermediates to disk.* Notebook state is
+the enemy of reproducibility. An analysis that depends on the
+order in which cells were executed is not an analysis; it is a
+one-time event. The rule forces the analysis to be a function of
+files on disk.
+
+================================================================================
+                       PART VI.  HANDS-ON EXERCISE
+================================================================================
+
+--------------------------------------------------------------------------------
+SLIDE 28 — HANDS-ON EXERCISE
+--------------------------------------------------------------------------------
+
+SLIDE CONTENT (verbatim)
+    28/34
+    Hands-On Exercise
+    Build a skill for YOUR research (25 min)
+    Track A (recommended): Write your own SKILL.md from scratch
+    Track B (guided): Install and test existing skills, observe the difference
+
+COMMENTARY
+
+*A note on format.* Sessions 2 and 3 of this series were notebook-
+driven: Michelle Audirac's Hugging Face workshop handed you a Colab
+with empty code cells to fill in, and Chris Stubbs's Claude Code
+session had a thermal-data exercise you worked through line by line.
+Today's hands-on is different. The artefact you leave with is not a
+filled-in notebook but a SKILL.md file in `~/.claude/skills/` that
+will shape how the agent writes code for you in every future
+session. This is a different rhythm --- less typing, more writing,
+the output is a methodology rather than a plot --- but it is just as
+concrete. A good SKILL.md is as reusable as a good function and
+arguably more durable, because it outlives the API change that
+breaks the function.
+
+The hands-on exercise has two tracks by design. Track A is for
+participants who already know which workflow they want to encode and
+are ready to write. Track B is for participants who need to see a
+skill in action before they can internalize the paradigm. Both
+tracks are twenty-five minutes, and both produce an artefact: Track
+A produces a SKILL.md; Track B produces a comparative observation of
+the agent's behavior with and without a skill. Participants are
+encouraged to pick whichever track they find more concrete, and
+Track B in particular leans on material Andorra has already
+published in the baygent-skills repository (see the Slide 31
+commentary below for the full list).
+
+--------------------------------------------------------------------------------
+SLIDE 29 — TRACK A: CREATE YOUR SKILL
+--------------------------------------------------------------------------------
+
+SLIDE CONTENT (verbatim)
+    29/34
+    Track A: Create Your Skill
+    •  Step 1 (5 min): Choose a workflow. Answer: What task? What steps?
+       What rules?
+    •  Step 2 (15 min): Write your SKILL.md using the template (next slide)
+    •  Step 3 (5 min): Test it — restart Claude Code, invoke your skill,
+       observe
+
+        # Create it
+        mkdir -p ~/.claude/skills/my-skill
+        nano ~/.claude/skills/my-skill/SKILL.md     # or use VS Code
+
+        # Or let Claude help write it!
+        "Help me create a skill at ~/.claude/skills/my-skill/SKILL.md
+         for the following workflow: [your answers from Step 1]"
+
+        # Test it
+        /my-skill
+
+COMMENTARY
+
+The five-fifteen-five time budget is empirical: in previous
+workshops, participants who spent less than five minutes on Step 1
+(choosing the workflow) ended up with poorly-scoped skills, and
+participants who spent more than fifteen minutes on Step 2 (writing
+the SKILL.md) ran out of time for testing, which is the step that
+catches the mistakes.
+
+The second invocation path --- "let Claude help write it" --- is
+the faster one and it is what most participants should use in
+practice. The reason is that writing good markdown is itself a
+skill (of the human kind), and delegating the drafting to the agent
+means the participant can focus on the *content* of the skill (what
+the steps are) rather than the *form* (how to structure the
+frontmatter). The conversational pattern is: the human types the
+answers to the four questions from Slide 25, the agent drafts a
+SKILL.md based on those answers, the human reviews and revises.
+
+The test step at the end is the most skipped and the most
+important. Testing means: restart Claude Code, invoke the skill
+with a realistic prompt, and watch whether the agent actually
+follows the workflow. If the agent follows the workflow, the skill
+works; if the agent skips a step or misinterprets a rule, the
+skill needs revision. The failure mode to watch for is "the agent
+acknowledged the skill but didn't apply it", which is almost
+always caused by an under-specified description or too-weak rule
+language.
+
+--------------------------------------------------------------------------------
+SLIDE 30 — THE TEMPLATE
+--------------------------------------------------------------------------------
+
+SLIDE CONTENT (verbatim)
+    30/34
+    The Template
+
+    ---
+    name: my-skill
+    description: >
+      [What does this do? What phrases should trigger it?]
+    ---
+
+    # [Skill Name]
+
+    ## Workflow
+    1. **[Think]** -- [What question/setup first?]
+    2. **[Think]** -- [What assumptions to state?]  ⚠️ CONFIRM
+    3. **[Do]** -- [First implementation step]
+    4. **[Validate]** -- [What check must pass?]
+    5. **[Do]** -- [Next implementation step]
+    6. **[Report]** -- [How should results look?]
+
+    ## Critical rules
+    - [What must the agent ALWAYS do?]
+    - [What must the agent NEVER do?]
+
+    ## Common gotchas
+    - [What goes wrong] → [How to fix it]
+
+    Domains: EDA · hypothesis testing · experiment design · data cleaning ·
+    ML eval · time series · lit review
+
+COMMENTARY
+
+The template on this slide is the one every participant copies into
+their first SKILL.md. It has three deliberately unusual features.
+
+First, the workflow is organized as Think-Think-Do-Validate-Do-
+Report. The doubled "Think" steps at the start are to emphasize
+that the first two phases are reasoning, not computation. The
+Validate step in the middle is the checkpoint. The Report at the
+end is the artefact. This shape --- think first, do carefully,
+validate explicitly, report clearly --- generalizes to almost every
+quantitative research task.
+
+Second, the critical rules section has exactly two bullets. Not
+three, not five, not fifteen. The template uses two because the
+author's experience is that novice skill writers tend to cram too
+many rules into the first draft, and then the agent cannot
+distinguish the important rules from the merely preferred ones.
+Two is enough to get started; more can be added after the first
+round of testing reveals which additional rules are needed.
+
+Third, the gotchas section is structured as arrow statements:
+what-goes-wrong → how-to-fix. The arrow syntax is not required by
+the spec but it is recommended because it forces the author to
+think in problem-solution pairs, which is the most useful form for
+gotcha knowledge.
+
+The domains list at the bottom of the slide is a suggestion
+engine: participants who cannot think of a workflow to encode can
+pick one from the list. In previous workshops, the most popular
+choices have been EDA (exploratory data analysis), data cleaning,
+and literature review.
+
+--------------------------------------------------------------------------------
+SLIDE 31 — TRACK B: INSTALL AND TEST EXISTING SKILLS
+--------------------------------------------------------------------------------
+
+SLIDE CONTENT (verbatim)
+    31/34
+    Track B: Install & Test Existing Skills
+
+        # Option 1: Bayesian workflow skills
+        git clone https://github.com/Learning-Bayesian-Statistics/baygent-skills /tmp/baygent
+        mkdir -p ~/.claude/skills
+        cp -r /tmp/baygent/bayesian-workflow ~/.claude/skills/
+        cp -r /tmp/baygent/causal-inference ~/.claude/skills/
+
+        # Option 2: Software engineering skills
+        git clone https://github.com/obra/superpowers /tmp/superpowers
+        cp -r /tmp/superpowers/skills/* ~/.claude/skills/
+
+        # Then restart Claude Code and try:
+        "Build a simple Bayesian regression model for this data"
+
+        # Watch: does it follow the 10-step workflow?
+        # Now remove the skill and try the same prompt:
+        # What steps does it skip?
+
+    The difference is dramatic. Skills turn a generic assistant into a
+    methodology-following expert.
+
+COMMENTARY
+
+Track B is the learn-by-comparison track. The participant installs
+an existing skill, runs a task, observes the output, removes the
+skill, runs the same task, and observes the difference. The
+comparison is what makes the value of skills visible; until a
+participant has seen the same prompt produce two different workflows
+--- one disciplined, one not --- the argument for skills is
+abstract.
+
+The prompt to use for the comparison is important. It should be a
+prompt squarely in the skill's domain ("build a Bayesian regression
+model" for the bayesian-workflow skill) but generic enough that an
+unscaffolded agent will produce output without complaining. The goal is to elicit the agent's default behavior
+and compare it to the skill-guided behavior, step by step.
+
+What to look for in the comparison, in order of importance: (1)
+which steps does the unscaffolded agent skip entirely (typically
+prior predictive checks, prior sensitivity, and LOO-PIT
+calibration); (2) which steps does the unscaffolded agent perform
+but superficially (typically convergence diagnostics, where the
+agent checks R-hat but not ESS or E-BFMI); (3) which steps does
+the unscaffolded agent perform adequately but in a non-standard
+way (typically reporting, where the agent uses frequentist
+language or a 95% confidence interval when the field convention
+is a 94% credible interval).
+
+The three differences above are the three places where the skill
+adds value. A participant who sees all three in one comparison has
+understood the paragraph "why skills matter" at a level no slide
+can convey.
+
+*Using Andorra's published eval material as your exercise inputs.*
+Alex Andorra did not write a formal workshop tutorial for baygent-
+skills, but he published something better: a complete evaluation
+harness that a participant can use as ready-made exercise material.
+Inside the cloned repository, look at:
+
+    baygent-skills/
+    └── evals/
+        └── bayesian-workflow/
+            ├── trigger_eval_set.json      (21 activation queries:
+            │                                10 should-trigger,
+            │                                11 should-not-trigger)
+            └── iteration-1/
+                ├── benchmark.json          (the reproducible eval)
+                ├── count-data-overdispersion/
+                ├── hierarchical-schools/
+                ├── logistic-regression-churn/
+                ├── model-comparison-houses/
+                ├── prior-elicitation-report/
+                ├── prior-sensitivity-check/
+                └── troubleshooting-divergences/
+
+The benchmark.json file aggregates six of these seven scenarios
+(prior-sensitivity-check is included in the directory but is not
+part of the main benchmark run). Across the six aggregated
+scenarios, the skill-armed agent passes 53 of 53 individual
+assertion checks (100%) and the unscaffolded agent passes 48 of 53
+(90.6%, which the slide rounds to 90.5%). The wall-clock time and
+token-usage costs from the same benchmark file are +29.1% and
++87.2% respectively, matching the slide's "+29% time, +87% tokens"
+to within rounding.
+
+There are three concrete exercises you can run with these files,
+each taking five to ten minutes, none requiring that you invent
+your own prompt:
+
+*Exercise B1 (two minutes --- does the skill activate?).* Open
+`evals/bayesian-workflow/trigger_eval_set.json`. It is a list of
+twenty-one research-flavoured user prompts with a
+`"should_trigger": true/false` label on each (ten should trigger
+the skill, eleven should not). Pick two from the `should_trigger:
+true` half and one from the `should_trigger: false` half. Paste each into Claude Code. The skill should activate
+on the first two and stay silent on the third. If it does not, the
+description field in SKILL.md is mis-specified for your wording ---
+and this is the single most common way a skill fails in practice.
+Sample triggering prompts from the file, verbatim:
+
+    "I've got survey data from 3000 respondents across 12 regions
+    and I want to estimate the probability that someone supports a
+    policy change, accounting for regional variation. Some regions
+    only have 30 respondents so I need the estimates to borrow
+    strength. Can you build a Bayesian model for this?"
+
+    "my pymc model has like 200 divergences and rhat is 1.05 on
+    the variance parameter. the trace plot for chain 3 looks
+    totally flat. what's going wrong and how do i fix it?"
+
+    "I'm trying to understand the effect of temperature on crop
+    yield using data from 50 farms over 10 years. I want to
+    account for the fact that farms might respond differently to
+    temperature. Should I use a hierarchical model?"
+
+Sample non-triggering prompts (the skill should stay silent) that
+Andorra included to test specificity:
+
+    "I need to run an A/B test analysis for our website redesign.
+    ... Can you calculate the p-value and tell me if the difference
+    is statistically significant?"
+
+    "I want to forecast daily sales for the next 90 days using
+    Prophet."
+
+If you run all three against the installed skill and the silent-
+case stays silent, you have verified that Andorra's description
+field discriminates Bayesian questions from adjacent-but-unrelated
+quantitative questions. If the silent case triggers anyway, you
+have a live demonstration of a description writing failure and a
+concrete target to fix.
+
+*Exercise B2 (five to ten minutes --- run a real benchmark
+scenario).* Pick one of the seven scenario directories in
+`iteration-1/` --- `logistic-regression-churn` is the most
+approachable, since churn prediction is familiar and the rubric
+has ten specific checks. Read the scenario's prompt, paste it into
+Claude Code with the skill active, and watch the agent work. Then
+open `iteration-1/benchmark.json` and look at the run for
+`logistic-regression-churn` / `configuration: with_skill`: the
+`expectations` field is a list of ten pass/fail checks like:
+
+    "Uses Bernoulli likelihood (pm.Bernoulli) with logit inverse-link
+     function"
+    "Standardizes or scales predictors before fitting the model"
+    "Sets weakly informative priors on regression coefficients
+     (Normal with sigma between 1 and 5)"
+    "Calls pm.sample_prior_predictive() before inference"
+    "Reports 94% HDI (not 95% CI) for parameter estimates"
+    "Uses coords and dims in the PyMC model definition"
+
+Each check has an `evidence` field quoting the line of code that
+satisfied it. Use the expectations as your own rubric: grade your
+agent's output against the same ten checks, and note where it
+passes, where it fails, and whether your failures are the same
+ones Andorra's without-skill run caught.
+
+*Exercise B3 (advanced, for participants who finish B1 and B2
+early).* Write your own scenario in the same format as
+`iteration-1/logistic-regression-churn/`: a prompt from your own
+research area, ten expectations the agent's output must satisfy,
+and a name. Run it against the installed skill. You have just
+written an evaluation for someone else's skill using your own
+domain knowledge --- which is the most valuable thing a researcher
+can contribute to an open skill project. If the skill fails on
+your scenario, the failure is a real contribution back to
+baygent-skills; open an issue on the repo with the scenario file
+and the agent's output.
+
+What makes these exercises work as workshop material is that they
+are Andorra's own benchmark, unmodified. You are not inventing a
+test; you are reproducing a test an author has already validated.
+The 90.5% / 100% numbers on Slide 18 come directly from the file
+you are grading against. That provides a ground truth that pure
+"try a prompt and see what happens" exercises lack.
+
+================================================================================
+                     PART VII.  SYNTHESIS AND RESOURCES
+================================================================================
+
+--------------------------------------------------------------------------------
+SLIDE 32 — WHAT DID YOU BUILD?
+--------------------------------------------------------------------------------
+
+SLIDE CONTENT (verbatim)
+    32/34
+    What Did You Build?
+    2–3 volunteers: share your skill design
+    What workflow did you encode?
+    What was hardest to express as steps?
+    What critical rule or gotcha did you include?
+
+COMMENTARY
+
+The sharing segment has two functions. The first is practical:
+hearing other participants' workflows expands each participant's
+sense of what skills can encode. A participant who came in thinking
+skills were only for statistics will hear someone describe a
+literature review skill and realize the paradigm is broader than
+they thought. The second is diagnostic: the question "what was
+hardest to express as steps?" surfaces the tacit knowledge in each
+workflow, which is exactly the knowledge that most benefits from
+being written down. A participant who says "it was hardest to
+explain when to stop iterating on the prior" has discovered a
+gotcha that belongs in the skill.
+
+The three questions are chosen for their specificity. "What
+workflow did you encode" is about scope. "What was hardest to
+express as steps" is about tacit knowledge. "What critical rule or
+gotcha did you include" is about guardrails. Together the three
+questions cover the three sections of the SKILL.md, and a good
+answer to all three implies a well-rounded skill.
+
+--------------------------------------------------------------------------------
+SLIDE 33 — KEY TAKEAWAYS
+--------------------------------------------------------------------------------
+
+SLIDE CONTENT (verbatim)
+    33/34
+    Key Takeaways
+    1.  A skill is a markdown file that teaches an agent your methodology
+    2.  Skills encode domain expertise, enforce guardrails, prevent common
+        mistakes
+    3.  Anatomy: frontmatter (name + description) + steps + rules + gotchas
+    4.  Start simple: 3–8 steps, 1–3 rules, 1–2 gotchas — refine over time
+    5.  Share your skills: reusable, composable, platform-portable
+    "Slow productivity" — skills force thinking before coding.
+    The value is in the guardrails: the things you would otherwise forget
+    under time pressure.
+
+COMMENTARY
+
+The five takeaways are the session's thesis in compressed form.
+
+*1. A skill is a markdown file that teaches an agent your
+methodology.* This is the definition. Not a prompt, not a function,
+not a plugin. A markdown file. The simplicity of the medium is the
+paradigm's most important property.
+
+*2. Skills encode domain expertise, enforce guardrails, prevent
+common mistakes.* These are the three functions a skill performs.
+Encoding is the easy part (you write down what you know); enforcing
+is where the ⚠️ CONFIRM markers do their work; preventing is where
+the critical rules and gotchas matter.
+
+*3. Anatomy: frontmatter (name + description) + steps + rules +
+gotchas.* The structure is standard. A skill that departs from this
+structure is almost always a skill that is harder to maintain and
+harder for agents to follow.
+
+*4. Start simple: 3–8 steps, 1–3 rules, 1–2 gotchas — refine over
+time.* This is the most practical advice on the slide. The first
+skill should be small. Small skills are easier to test, easier to
+debug, and easier to finish. A finished small skill is strictly
+more useful than an unfinished large one.
+
+*5. Share your skills: reusable, composable, platform-portable.*
+Skills are a community artefact. A skill you write for your own use
+is usable by your labmates, by your field, and by the broader
+research community. The cost of sharing is a git push; the benefit
+is distributed expertise.
+
+The closing quote is from Cal Newport's notion of "slow
+productivity", borrowed here because the paradigm fits. Skills
+force thinking before coding. In an era when LLM-assisted coding
+can produce working code in seconds, the bottleneck is no longer
+typing; it is deciding what to type. Skills are the artefact that
+encodes the deciding.
+
+The final sentence of the slide --- "the value is in the guardrails:
+the things you would otherwise forget under time pressure" --- is
+the session's final claim. The guardrails are not the boring part
+of a skill; they are the point. The agent remembers them so you
+don't have to.
+
+--------------------------------------------------------------------------------
+SLIDE 34 — RESOURCES AND NEXT STEPS
+--------------------------------------------------------------------------------
+
+SLIDE CONTENT (verbatim)
+    34/34
+    Resources & Next Steps
+    •  Agent Skills Spec: agentskills.io
+    •  Bayesian Skills: github.com/Learning-Bayesian-Statistics/baygent-skills
+    •  Software Skills: github.com/obra/superpowers
+    •  Building Agents: anthropic.com/research/building-effective-agents
+    •  Skill Creator: /skill-creator (built into Claude Code plugins)
+    •  ArXiv paper: arxiv.org/abs/2604.05160
+    Your call to action:
+    Take the skill you started today → Refine it → Install it → Test it →
+    Share it with your lab.
+    Post-session survey: [link]    ·    Workshop materials:
+    astrostubbs.github.io/GenAI-for-Scholarship
+
+COMMENTARY
+
+The resources list is the session's bibliography. Each entry is
+included because it contains material the participant will need to
+do real work.
+
+*agentskills.io* is the cross-platform Agent Skills Specification.
+This is where the format is defined and where new runtime implementations
+are registered. Participants who want to know why the frontmatter
+fields are what they are should read the spec.
+
+*baygent-skills* is the Learning Bayesian Statistics community's
+collection of Bayesian and causal inference skills, licensed MIT.
+This is the repository the Bayesian workflow skill and the causal
+inference skill come from. Participants who want to see worked
+examples of production-grade skills should start here.
+
+*superpowers* is Jesse Vincent's software engineering skills
+collection. The TDD and systematic-debugging skills live here.
+Participants who write code for research --- which is most
+participants --- should install at least the TDD skill and observe
+its effect on their workflow.
+
+*Building Effective Agents* is Anthropic's position paper on agent
+design. It is the clearest written statement of the
+workflow-vs-agent distinction from Slide 9 and of the argument for
+minimal flexibility.
+
+*Skill Creator* is the meta-skill shipped with Claude Code plugins
+that helps users write and evaluate new skills. It is the fastest
+path from "I have a workflow" to "I have a tested skill".
+
+The call-to-action is the operative sentence on the slide: refine,
+install, test, share. Each verb is a separable
+action. Refine means revise the draft SKILL.md based on what you
+learned in testing. Install means put it in `~/.claude/skills/`
+permanently, not just for the workshop. Test means use it on real
+work in the week after the workshop. Share means give the file to
+a labmate and see if it works for them. The sequence is the
+difference between "I made a thing in a workshop" and "I contributed
+to my lab's methodology."
+
+================================================================================
+                       APPENDIX A.  A SHORT READING LIST
+================================================================================
+
+The following are the works most directly relevant to the session's
+arguments. They are listed in order of how useful they are to a
+participant who wants to go deeper.
+
+1. Gelman, A., Vehtari, A., Simpson, D., Margossian, C. C., Carpenter,
+   B., Yao, Y., Kennedy, L., Gabry, J., Bürkner, P.-C., and Modrák, M.
+   (2020). "Bayesian Workflow." arXiv:2011.01808. The paper from which
+   the Bayesian workflow skill is derived. Essential reading for
+   anyone writing skills in applied Bayesian statistics.
+
+2. Pearl, J. (2009). Causality: Models, Reasoning, and Inference
+   (2nd ed.). Cambridge University Press. The canonical reference
+   for the DAG-based approach to causal inference that underpins the
+   thinking-first phase of the causal inference skill.
+
+3. Hernán, M. A. and Robins, J. M. (2020). Causal Inference: What If.
+   Chapman & Hall/CRC. The textbook most closely aligned with the
+   target-trial framing that motivates the causal inference skill's
+   reporting conventions.
+
+4. Anthropic (2024). "Building Effective Agents." anthropic.com/
+   research/building-effective-agents. The position paper that
+   articulates the workflow-vs-agent distinction and the argument for
+   fixing maximum structure while leaving content to LLM judgement.
+
+5. Piironen, J. and Vehtari, A. (2017). "Sparsity information and
+   regularization in the horseshoe and other shrinkage priors."
+   Electronic Journal of Statistics 11(2): 5018–5051. The prior that
+   fixed Bug #2 of the bayesian-workflow skill's v1.0.
+
+6. Beck, K. (2002). Test-Driven Development: By Example. Addison-
+   Wesley. The origin of the RED → GREEN → REFACTOR cycle encoded in
+   the superpowers TDD skill.
+
+7. Vehtari, A., Gelman, A., Simpson, D., Carpenter, B., and Bürkner,
+   P.-C. (2021). "Rank-Normalization, Folding, and Localization: An
+   Improved R̂ for Assessing Convergence of MCMC." Bayesian Analysis
+   16(2): 667–718. The paper that tightened the R-hat threshold to
+   1.01 and motivated the Bayesian workflow skill's diagnostic rule.
+
+8. Andorra, A. (2026, March 16). "Bayesian Workflow Agent Skill:
+   PyMC + ArviZ." learnbayesstats.com. The essay announcing and
+   evaluating the baygent-skills bayesian-workflow skill; the source
+   of the 100% / 90.5% scenario numbers, the 29% / 87% time and
+   token costs, and the six-scenario benchmark composition (logistic
+   regression, hierarchical models, troubleshooting, count data,
+   model comparison, prior elicitation).
+
+9. Andorra, A. (2026, March 23). "Bayesian Workflow Skill: Real-World
+   Stress Test (v1.1)." learnbayesstats.com. The follow-up essay
+   documenting the Soccer Factor Model stress test and the three
+   bugs fixed in v1.1. Source of the "Evals are necessary. They're
+   not sufficient." takeaway and the explicit citation to Piironen
+   and Vehtari 2017.
+
+10. Andorra, A. (2026). "Building a Causal Inference Agent Skill
+    with PyMC, CausalPy and DoWhy." learnbayesstats.com. The earlier
+    essay on the causal-inference skill, source of the "do less,
+    carefully" and "earn the right to say 'causes'" phrasings that
+    shape the framing of Section 4 of this companion.
+
+11. Learning Bayesian Statistics (2026). baygent-skills repository.
+    github.com/Learning-Bayesian-Statistics/baygent-skills. MIT
+    license. The reference implementation. The bayesian-workflow
+    subdirectory (v1.2 at time of writing) is the practical example
+    walked through in the Slide 18 commentary above.
+
+12. Stubbs, C. (2026). "Session 3: Unleashing Claude Code CLI as a
+    Problem Solver." Generative AI for Scholarship, Harvard HDSI/FAS.
+    astrostubbs.github.io/GenAI-for-Scholarship/session3-power-user
+    .html. The prior session in this workshop series. Covers Claude
+    Code installation on macOS, the Harvard HUIT Bedrock endpoint
+    configuration, slash commands, Plan mode, and the "Building
+    Custom Skills in Claude Code" exercise (reusable slash commands)
+    that this Session 4 extends into full SKILL.md methodologies.
+    The installation, authentication, and first-use material from
+    Session 3 is the prerequisite this companion assumes.
+
+13. Willison, S. (2025). "Agents." simonwillison.net/2025/Sep/18/
+    agents/. A short, widely cited essay defining agents as "LLMs
+    in a loop with tools" and arguing against over-complicated
+    framing. The companion's first-principles definition on Slides
+    6–8 is consistent with Willison's.
+
+14. Yaneva, K., Vyahhi, N., Gorskikh, M., et al. (2026, April 9).
+    "Intro to AI Agents and Agentic Web." Imagination in Action,
+    MIT/Harvard. The workshop held the day before Session 4. The
+    source of the "radical minimalism" counterargument discussed
+    in the Slide 23 commentary, of the OpenClaw SKILL.md vs.
+    methodology-SKILL.md terminology disambiguation, and of the
+    agent-framework timeline (Anthropic MCP launched 2024-11-25).
+
+15. Harvard Center of Mathematical Sciences and Applications
+    (CMSA). cmsa.fas.harvard.edu. A Harvard-local resource for
+    Harvard researchers interested in the mathematical-statistics
+    boundary this companion treats. Barzilay, R. (2026, April 23)
+    will deliver the Sixth Annual Yip Lecture at CMSA on AI for
+    scientific discovery, two weeks after Session 4, and is a
+    natural follow-on for participants who want to hear more about
+    AI in the mathematical sciences from a primary researcher in
+    the area.
+
+================================================================================
+                      APPENDIX B.  GLOSSARY OF TERMS
+================================================================================
+
+Agent. A program that uses an LLM as a planner, calls tools, observes
+the results, and iterates until a goal is reached.
+
+Agent loop. The Think-Act-Observe-Decide while loop at the core of
+every modern coding agent.
+
+CLAUDE.md. A markdown file loaded automatically into every Claude Code
+session in a given directory. Used for always-active instructions
+(conventions, preferences) that apply to all tasks in the project.
+
+Checkpoint. A mandatory step in a skill workflow at which the agent
+must verify progress, typically by confirming with the user or by
+running a diagnostic whose output must pass before proceeding. Marked
+in SKILL.md with a ⚠️ CONFIRM or equivalent symbol.
+
+Critical rule. A non-negotiable guardrail in a skill, stated as an
+"always" or "never" statement, enforced by the agent even under
+time pressure.
+
+Frontmatter. The YAML block at the top of a SKILL.md file containing
+the skill's name and description. The name is the identifier; the
+description determines when the skill is activated.
+
+Gotcha. An entry in a skill's gotchas section describing a specific
+failure mode, the symptom it produces, and the correction.
+
+MCP (Model Context Protocol). A cross-vendor protocol for giving
+agents access to external tools. Complementary to skills: MCP expands
+what actions the agent can take; skills expand what workflows the
+agent can follow.
+
+Progressive disclosure. The design pattern in which a skill's SKILL.md
+is kept short and pointed, while deeper material is loaded on demand
+from the skill's references/ directory.
+
+Refutation test. A diagnostic in causal inference whose purpose is to
+falsify an estimate if the underlying assumptions are wrong. Placebo
+outcomes, negative controls, and unobserved confounder bounds are
+examples. Mandatory in the causal inference skill.
+
+Skill. A structured markdown document, typically stored in
+~/.claude/skills/, that teaches an agent a domain workflow. A skill
+consists of frontmatter, a workflow section, critical rules, and
+common gotchas.
+
+Subagent. A new agent loop spawned by a parent agent, with its own
+context, tools, and goal. Subagents enable delegation, parallelism,
+and isolation.
+
+Workflow. A predefined sequence of steps in which the control flow is
+fixed and deterministic. Contrasted with an agent, in which the
+control flow is LLM-driven.
+
+================================================================================
+                        APPENDIX C.  SESSION CHECKLIST
+================================================================================
+
+Before the end of the workshop, each participant should have
+completed the following:
+
+[ ] Read the four questions on Slide 25 and written down answers
+[ ] Selected a workflow to encode
+[ ] Created the directory ~/.claude/skills/<your-skill-name>/
+[ ] Written a SKILL.md with frontmatter, workflow, rules, gotchas
+[ ] Restarted Claude Code
+[ ] Invoked the skill on a realistic prompt
+[ ] Observed at least one place where the skill changed the agent's behavior
+[ ] Revised the skill based on the observation
+
+A participant who has completed all eight items has produced a
+working first skill and is ready to iterate on it in the following
+week. A participant who has completed fewer than five items should
+continue the exercise after the workshop, following the template on
+Slide 30.
+
+================================================================================
+           APPENDIX D.  REPORTED EVALUATION NUMBERS AT A GLANCE
+================================================================================
+
+The table below consolidates the quantitative claims reproduced from
+the workshop slides, with their provenance and the known caveats on
+each. These numbers originate in Alex Andorra's two learnbayesstats
+essays and the baygent-skills GitHub repository. Although no agent
+was re-run for this companion, the aggregate numbers WERE
+independently re-verified by direct arithmetic on
+`baygent-skills/evals/bayesian-workflow/iteration-1/benchmark.json`:
+across the six benchmark scenarios, the skill-armed agent passes
+53/53 individual assertion checks (100%), the unscaffolded agent
+passes 48/53 (90.6%, slide rounds to 90.5%), with-skill total
+wall-clock time is 1158 s and tokens 206,143, without-skill total
+is 897 s and 110,137 tokens; the time and token ratios are +29.1%
+and +87.2%, matching the slide's "+29% time, +87% tokens" to within
+rounding. The verification means the headline numbers on Slide 18
+are now traceable to a specific JSON file, not only to a blog post.
+
+  Claim                      Value         Primary source              N     Caveats
+  -------------------------  ------------  --------------------------  ---   -----------------
+  Bayesian skill, with       100% (6/6)    Andorra 2026-03-16 blog     6     No CIs reported
+  baygent-skills                           post; baygent-skills
+                                           repository v1.2
+
+  Bayesian skill, without    90.5%         Andorra 2026-03-16          6     Individual scenarios
+                                                                             ranged 88%–100%;
+                                                                             the 90.5% average
+                                                                             is not a uniform
+                                                                             narrow miss
+
+  Time cost of rigor         +29%          Andorra 2026-03-16          -     Wall-clock on
+                                                                             unspecified hardware
+
+  Token cost of rigor        +87%          Andorra 2026-03-16          -     Model version not
+                                                                             disclosed on slide
+
+  Scenario composition       6 types       Andorra 2026-03-16          -     logistic regression,
+                                                                             hierarchical models,
+                                                                             troubleshooting,
+                                                                             count data, model
+                                                                             comparison, prior
+                                                                             elicitation
+
+  Causal skill, with         100% (6/6)    Slide 20; baygent-skills    6     Sourced from the
+                                           causal-inference skill            learnbayesstats
+                                           and its companion essay          causal-inference
+                                                                             essay
+
+  Causal skill, without      68%           Slide 20                    6     Slide attributes
+                                                                             the 32 pp gap to
+                                                                             reasoning
+                                                                             discipline
+
+  Bayesian skill v1.1        3 bugs fixed  Andorra 2026-03-23          -     Soccer Factor Model
+  real-world stress test                   stress-test blog post             (SFMMO): ordered
+                                                                             logistic, 5 leagues,
+                                                                             ~10,000 matches,
+                                                                             30+ features
+
+  Current skill version      v1.2          baygent-skills repo         -     As of the fetch on
+                                                                             2026-04-10
+
+At N = 6 the individual percentages are coarse: a single additional
+failure in either condition is worth ~16 percentage points. The values
+should be read as directional evidence that the skill produces a
+large effect, not as precision estimates of it. Andorra's own framing
+is the right one: "Evals are necessary. They're not sufficient."
+
+================================================================================
+            APPENDIX E.  LIMITATIONS OF THIS COMPANION DOCUMENT
+================================================================================
+
+A companion document is not a primary source. The following are the
+limitations a reader should keep in mind.
+
+1. *Not an experimental report.* No evaluation was run for this
+   companion. Quantitative claims originate in Alex Andorra's two
+   learnbayesstats essays (2026-03-16 and 2026-03-23) and in the
+   baygent-skills repository at v1.2. These primary sources were
+   consulted and the numbers were reconciled against them in
+   Appendix D, but the underlying evaluation protocol (evaluator
+   model version, scoring rubric, random seeds, confidence intervals)
+   is as reported by Andorra and was not independently replicated.
+
+2. *Opinionated commentary.* The commentary under each slide is the
+   author's interpretation and framing, written to help a reader
+   understand the slide's argument. For the Bayesian workflow and
+   stress-test slides, the commentary has been reconciled against
+   Andorra's primary sources; for the causal inference, software
+   engineering, and math olympiad slides, the commentary rests on
+   the slide content plus this companion author's reading of the
+   surrounding literature. Where the commentary goes beyond the
+   primary source, it is the companion author's framing, not a claim
+   the original skill authors made.
+
+3. *Snapshot in time.* The skills ecosystem is evolving. URLs,
+   repository layouts, default sampler choices, R-hat thresholds, and
+   even the frontmatter schema of SKILL.md may change after the date
+   on the title page. Readers encountering a discrepancy between this
+   companion and a current source should trust the current source.
+
+4. *Single-voice editorial framing.* The narrative argues for skills
+   as the solution to a specific problem of agent indiscipline. This
+   framing is defensible but not neutral; a reader who wants a
+   contrarian view should read the "Building Effective Agents" essay,
+   which discusses when NOT to reach for an agentic approach at all.
+
+5. *Unverified third-party links.* URLs reproduced from the slides
+   (agentskills.io, the arXiv link on Slide 34, the workshop materials
+   link on Slide 34) were not verified in the preparation of this
+   companion. Readers should expect some dead or drifted links.
+
+6. *Cited empirical effects are from small N.* As noted in Appendix D,
+   the Bayesian and causal evaluations that anchor Slides 18 and 20
+   are six-scenario samples. The effect sizes are suggestive but the
+   precision of the point estimates is low. A fair summary is that
+   skill-guided agents outperform unscaffolded agents on these
+   benchmarks by a margin larger than sampling noise can plausibly
+   explain, with the exact magnitude uncertain.
+
+================================================================================
+                             END OF COMPANION
+================================================================================
