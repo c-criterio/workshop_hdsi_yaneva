@@ -159,26 +159,3 @@ Every piece of material in this directory traces to a primary source:
   discretion. The companion and exercise files are distributed under
   CC BY-NC 4.0 matching the broader Generative AI for Scholarship
   series unless otherwise noted.
-
-## Maintenance
-
-If Andorra updates baygent-skills before the workshop, refresh the
-clone:
-
-```bash
-cd baygent-skills && git pull && cd ..
-bash install_skills.sh
-```
-
-And re-read the companion Slide 19 commentary to see whether any new
-bug fixes or critical rules have landed since the Soccer Factor Model
-stress test. The companion's Appendix E explicitly notes that the
-skills ecosystem is a snapshot in time; update the companion's version
-number notes if a v1.3 or later ships.
-
-## Contact and questions
-
-Post-session issues should go to the Harvard HDSI workshop feedback
-form (link on the closing slide). Issues with the baygent-skills
-repository itself should go to the GitHub issue tracker at
-`github.com/Learning-Bayesian-Statistics/baygent-skills/issues`.
